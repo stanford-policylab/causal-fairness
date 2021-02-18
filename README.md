@@ -1,2 +1,2 @@
-# causal-fairness
-Causal fairness considered harmful
+# causal_fairness
+ Winter 2021 Sharad

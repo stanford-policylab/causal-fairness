@@ -1,0 +1,74 @@
+DEFINITIONS OF FAIRNESS
+
+1) Equal opportunity 
+	* Wang (Wang and Blei 2019) - Equal Opportunity and Affirmative Action via Counterfactual Predictions
+
+	* Equivelant to no direct causal pathway between Protected attribute and Decision
+
+ 2) Counterfactual Fairness / Affirmative Action (CAN WE UNIFY THIS WITH UNFAIR CAUSAL PATHWAYS)
+	* Wang (Wang and Blei 2019) - Equal Opportunity and Affirmative Action via Counterfactual Predictions
+
+		*   Matt J Kusner, Joshua Loftus, Chris Russell, and Ricardo Silva. 2017. Counterfactual fairness. In Advances in Neural Information Processing Systems. 4066–4076.
+				-> Same definition, different algorithm
+
+		--> ***These are a strengthened version of 3) Unfair causal pathways because they are effectively saying there can be NO causal pathway from the Sensitive attribute to the Outcome***
+
+****3) Unfair Causal Pathways --- subsumes (2) and (1)****
+
+	Quote from Coston2020:
+
+	Another line of work considers unfair causal pathways between the protected attribute (or its proxy) and the outcome variable or target of prediction [35, 57]. These papers characterize discrimination via path-specific effects, which are defined by interventions on the protected attribute. 
+
+	[X] * Razieh Nabi and Ilya Shpitser. 2018. Fair inference on outcomes. In Thirty-Second AAAI Conference on Artificial Intelligence.
+
+	* Junzhe Zhang and Elias Bareinboim. 2018. Fairness in decision-making – the causal explanation formula. In Thirty-Second AAAI Conference on Arti￿cial Intel- ligence.
+
+	[X] *  Niki Kilbertus,Mateo Rojas Carulla, Giambattista Parascandolo,Moritz Hardt, Dominik Janzing, and Bernhard Schölkopf. 2017. Avoiding discrimination through causal reasoning. In Advances in Neural Information Processing Systems. 656–66
+		-> Unfairness 1: Unresolved discrimination (assume bad unless resolved)
+			* Special case -- demographic parity
+			* Special case -- equalized odds 
+			* Closest to path-specific-effects
+				* Definition 1 (Unresolved discrimination). A variable V in a causal graph exhibits unresolved dis- crimination if there exists a directed path from A to V that is not blocked by a resolving variable and V itself is non-resolving.
+
+		-> Unfairness 2: Proxy discrimination (assume good unless through bad proxy)
+			* Intervention affects outcome probability
+			* Closest to Wang and Blei --- Kilbertus focus on proxies, Wang/Kusner focus on direct protected attribute, in either case 	discrimination criteria has to do with influence of the variable on the outcome
+				*** Can we prove that AA = eliminating the causal path? (TODO: Wednesday)
+
+				* Definition 2 (Potential proxy discrimination). A variable V in a causal graph exhibits potential proxy discrimination, if there exists a directed path from A to V that is blocked by a proxy variable and V itself is not a proxy.
+
+
+		TL;DR: These are just different parameterizations of some blacklisted pathways which SHOULD NOT have an effect in the causal model 
+
+
+	* Bilal Qureshi, Faisal Kamiran, Asim Karim, and Salvatore Ruggieri. “Causal Discrimination
+Discovery Through Propensity Score Analysis”. In: (Aug. 12, 2016). arXiv: 1608.03735.
+
+	* Francesco Bonchi, Sara Hajian, Bud Mishra, and Daniele Ramazzotti. “Exposing the probabilistic causal structure of discrimination”. In: (Mar. 8, 2017). arXiv: 1510.00552v3.
+
+
+
+**** 4) Coston 2020 -- Counterfactual Risk Assessments, Evaluation, and Fairness ****
+
+	1) Counterfactual Base Rate Parity (Y^0 i.i.d of Protected Attribute)
+
+	2) Counterfactual Predictive Parity
+
+	3) Counterfactual Equalized Odds 
+
+**** 5) Kosuke Imai 2020 -- Principal Fairness ****
+	
+	* Falls under the subclass of Calibration, and the same critiques of Corbette-Davies and Goel 2018 apply
+	* Example Income---Race---Strata membership are all correlated (potential outcomes are all correlated)
+	* Thus, Race is not independent of strata. Then the algorithm can discriminate by penalizing the strata that are minorities
+	* Their response is "all people are created equal," meaning they assume that conditioning on relevant covariates, protected attributes will be independent of protected attributes after adjusting for covariates. However, it is absurd to expect that we can observe ALL covariates. 
+	* In fact, if we can observe all covariates, then stratifying by those would eliminate the need for principal strata, because it is only from the covariates that we INFER the principal strata. Occam's razor. Why would we need the middle man of principle strata to stratify? (Counterargument: this is possibly helpful to increase statistical power, by reducing the number of strata???)
+
+	Note: Can we show this empirically???
+
+5) PC-Fairness: A Unified Framework for Measuring Causality-based Fairness
+	* Weakness 1: Missing Kilbertus et. al.
+	* Weakness 2: Only works for discrete values --- not actually a generalizing (e.g. COMPAS scores are continuous)
+	*** Different goal: Estimating discerimination, not trying to resolve it 
+	
+
