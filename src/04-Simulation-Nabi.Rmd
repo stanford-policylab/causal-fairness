@@ -1,0 +1,338 @@
+---
+title: "Simulation 04 Nabi and Shpitser"
+author: "Hamed Nilforoshan"
+date: "2/22/2021"
+output:
+  github_document:
+    pandoc_args: --webtex
+---
+
+
+```{r setup, include=FALSE}
+library(sigmoid)
+library(tidymodels)
+library(tidyverse)
+library(furrr)
+library(nloptr)
+
+
+# Set number of workers.
+plan(multicore, workers = 4)
+
+# Set the ggplot theme.
+theme_set(theme_bw(base_size = 20))
+```
+
+## Overview
+
+We construct a stylized example illustrating the sub-optimal outcomes of Wang and Blei's fairness definitions (Affirmative Action and Equal Opportunity) on utility. 
+
+## Setup
+
+A "book of life" is a draw of each potential outcome for a population of a given
+size. We'll define a function that generates a book of life for a given set of
+parameters. T
+
+```{r book_of_life}
+gen_book_of_life <- function(
+  pop_size,
+  frac_black,
+  e_0,
+  e_r, 
+  e_noise,
+  m_0,
+  m_e,
+  m_noise,
+  t_0,
+  t_m,
+  t_e,
+  t_noise,
+  a_0,
+  a_t,
+  a_r,
+  ...
+) {
+  
+  # Define the structural equations.
+  f_E <- function(r_i, noise){
+    return(round(e_0 + e_r*r_i + noise,digits=1))
+  }
+  
+  f_M <- function(e_i, noise){
+    return(round(m_0 + m_e*e_i + noise,digits=1))
+  }
+
+  f_T <- function(m_i, e_i, noise){
+    return(round(t_0 + t_m*m_i + t_e*e_i + noise ,digits=1))
+  }
+  
+  f_A_raw <- function(t_i, r_i){
+    return(a_t*t_i + a_r*r_i + a_0)
+    #return(round(sigmoid(a_t*t_i + a_r*r_i- a_0), digits = 0))
+  }
+  
+  f_A <- function(t_i, r_i){
+    return(sigmoid(a_t*t_i + a_r*r_i + a_0))
+  }
+
+  
+
+  # Generate the book of life.
+  book_of_life <- tibble(
+      # Generate the exogenous variables.
+      R = as.integer(rbernoulli(pop_size, frac_black)), # Race (Black=1, White=0)
+      
+      E_noise = rnorm(pop_size, mean = 0, sd = e_noise), #Educational opportunities
+      E_black = f_E(1,noise = E_noise),
+      E_white = f_E(0,noise = E_noise),
+      
+      M_noise = rnorm(pop_size, mean = 0, sd = m_noise), #Medical school preparation
+      M_black = f_M(E_black, noise=M_noise),
+      M_white = f_M(E_white, noise=M_noise),
+
+      # Generate the endogenous variables.
+      T_noise = rnorm(pop_size, mean = 0, sd = t_noise), #Medical school preparation
+      T_black = f_T(M_black, E_black, noise=T_noise),
+      T_white = f_T(M_white, E_white, noise=T_noise),
+      
+      E = if_else(R==1,E_black,E_white),
+      M = if_else(R==1,M_black,M_white),
+      T = if_else(R==1,T_black,T_white),
+
+      A_raw = f_A_raw(T, R), # Admissions Committee Decision 
+      A_prob = f_A(T, R), # Admissions Committee Decision 
+      A = as.integer(runif(pop_size,min=0,max=1) < A_prob),
+      A_black = f_A(T_black, 1), # Admissions Committee Decision 
+      A_white = f_A(T_white, 0), # Admissions Committee Decision 
+
+      # Generate potential outcomes
+      L_p = M, # Lives saved if admitted
+      D_p = R , # Added diversity if admitted  
+      
+      # Generate observed outcomes
+      L_o = L_p * A, # Lives saved observed
+      D_o = D_p * A  # Added diversity observed 
+      
+  )
+}
+```
+
+
+## Initialize parameters and books of life
+We initialize the training population size for the book of life, the fraction of the population that is a minority (black), and the number of counterfactual draws when calculating affirmative action decisions.
+
+We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
+
+```{r init}
+POP_SIZE = 10000
+POP_SIZE_TEST = 5000
+POP_SIZE_TEST_ADMIT = 2500
+FRAC_BLACK = 0.2
+COUNTER_FACTUAL_SAMPLE = 10000
+
+
+df_train <-gen_book_of_life(pop_size=POP_SIZE,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-50,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.5,
+                            t_e=0.5,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-50,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.5,
+                            t_e=0.5,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+```
+
+
+
+
+## Estimate naive baseline coefficients to measure Unfair PSE 
+
+```{r ml_naive}
+
+
+
+E_lm <-  lm(E ~ R, data = df_train)
+M_lm <-  lm(M ~ E, data = df_train)
+T_lm <-  lm(T ~ M + E, data = df_train)
+A_glm <- glm(A ~ T + R, data = df_train, family = "binomial", control = list(maxit = 1000))
+
+summary(E_lm)
+summary(M_lm)
+summary(T_lm)
+summary(A_glm)
+
+
+coef(summary(A_glm))["R"]
+
+
+a_0 = summary(A_glm)$coefficients[1]
+a_t = summary(A_glm)$coefficients[2]
+a_r = summary(A_glm)$coefficients[3]
+
+
+t_0 = summary(T_lm)$coefficients[1]
+t_m = summary(T_lm)$coefficients[2]
+t_e = summary(T_lm)$coefficients[3]
+
+
+e_0 = summary(E_lm)$coefficients[1]
+e_r = summary(E_lm)$coefficients[2]
+
+exp(abs(e_r*t_e*a_t)+abs(a_r))
+
+```
+
+
+
+
+
+## Fit the constrained MLE
+
+```{r ml_outcomes}
+
+# Define the negative log likelihood function
+eval_f <- function(beta, dat, E=E, M=M, T=T, A=A, R=R, Xe=Xe, Xm=Xm, Xt=Xt, Xa=Xa, func, tau_u, tau_l){
+  
+  beta_E = beta[1:ncol(Xe)]
+  beta_M = beta[(ncol(Xe) + 1):(ncol(Xe) + ncol(Xm))]
+  beta_T = beta[(ncol(Xe) + ncol(Xm) + 1):(ncol(Xe) + ncol(Xm) + ncol(Xt))]
+  beta_A = beta[(ncol(Xe)+ncol(Xm)+ncol(Xt)+1):(ncol(Xe)+ncol(Xm)+ncol(Xt)+ncol(Xa))]
+  
+  names(beta_E) = colnames(Xe)
+  names(beta_M) = colnames(Xm)
+  names(beta_T) = colnames(Xt)
+  names(beta_A) = colnames(Xa)
+    
+      
+    E = as.matrix(E)
+    M = as.matrix(M)
+    T = as.matrix(T)
+    A = as.matrix(A)
+    R = as.matrix(R)
+
+    
+    f = t(E-Xe%*%beta_E)%*%(E-Xe%*%beta_E)+
+      t(M-Xm%*%beta_M)%*%(M-Xm%*%beta_M)+
+      t(T-Xt%*%beta_T)%*%(T-Xt%*%beta_T)+
+      sum(A*log(1+exp(-Xa%*%beta_A))+(1-A)*log(1+exp(Xa%*%beta_A))) 
+    
+    return(f/nrow(dat))
+}
+  
+# Define the inequality constraint 
+eval_g_ineq <- function(beta, dat, E=E, M=M, T=T, A=A, R=R, Xe=Xe, Xm=Xm, Xt=Xt, Xa=Xa, func, tau_u, tau_l){
+  
+  beta_E = beta[1:ncol(Xe)]
+  beta_M = beta[(ncol(Xe) + 1):(ncol(Xe) + ncol(Xm))]
+  beta_T = beta[(ncol(Xe) + ncol(Xm) + 1):(ncol(Xe) + ncol(Xm) + ncol(Xt))]
+  beta_A = beta[(ncol(Xe)+ncol(Xm)+ncol(Xt)+1):(ncol(Xe)+ncol(Xm)+ncol(Xt)+ncol(Xa))]
+  
+  names(beta_E) = colnames(Xe)
+  names(beta_M) = colnames(Xm)
+  names(beta_T) = colnames(Xt)
+  names(beta_A) = colnames(Xa)
+    
+  pse = func(beta_E,beta_M,beta_T,beta_A)
+  eval_g =  c(pse - tau_u, tau_l - pse)
+  return(eval_g)
+}
+  
+
+compute_pse <- function(beta_E,beta_M,beta_T,beta_A){
+  e_r = beta_E[2]
+  t_e = beta_T[3]
+  a_t = beta_A[2]
+  a_r = beta_A[3]
+  
+  pse_eff=exp(abs(e_r*t_e*a_t)+abs(a_r))
+  
+  return(as.numeric(pse_eff))
+}
+
+
+
+E_lm <-  lm('E ~ R', data = df_train)
+M_lm <-  lm('M ~ E', data = df_train)
+T_lm <-  lm('T ~ M + E', data = df_train)
+A_glm <- glm('A ~ T + R', data = df_train, family = "binomial", control = list(maxit = 1000))
+
+summary(A_glm)
+
+Xe <- as.matrix(model.matrix(E ~ R, data=df_train))
+Xm <- as.matrix(model.matrix(M ~ E, data=df_train))
+Xt = as.matrix(model.matrix(T ~ M + E,  data=df_train))
+Xa = as.matrix(model.matrix(A ~ T + R , data=df_train))
+
+E = df_train$E
+M = df_train$M
+T = df_train$T
+A = df_train$A
+R = df_train$R
+
+
+# Initialize parameters
+beta_E_0 = rep(0, ncol(Xe))
+beta_M_0 = rep(0, ncol(Xm))
+beta_T_0 = rep(0, ncol(Xt))
+beta_A_0 = rep(0, ncol(Xa))
+
+beta_start = c(beta_E_0, beta_M_0, beta_T_0, beta_A_0)
+
+
+# Solve the constrained optimization problem
+mle = nloptr(x0=beta_start, 
+             eval_f=eval_f, 
+             eval_g_ineq=eval_g_ineq,
+             opts = list("algorithm"="NLOPT_LN_COBYLA","xtol_rel"=1.0e-8, "maxeval"=500000),
+             dat=df_train, E=E, M=M, T=T, A=A, R=R,  
+             Xe=Xe, Xm=Xm, Xt=Xt, Xa=Xa, 
+             func=compute_pse, tau_u=1.05, tau_l=0.95)
+
+###
+### Things to try 
+### algo = NLOPT_LN_BOBYQA
+### increase maxeval
+###
+###
+
+beta = mle$solution
+
+beta_E = beta[1:ncol(Xe)]
+beta_M = beta[(ncol(Xe) + 1):(ncol(Xe) + ncol(Xm))]
+beta_T = beta[(ncol(Xe) + ncol(Xm) + 1):(ncol(Xe) + ncol(Xm) + ncol(Xt))]
+beta_A = beta[(ncol(Xe)+ncol(Xm)+ncol(Xt)+1):(ncol(Xe)+ncol(Xm)+ncol(Xt)+ncol(Xa))]
+
+names(beta_E) = colnames(Xe)
+names(beta_M) = colnames(Xm)
+names(beta_T) = colnames(Xt)
+names(beta_A) = colnames(Xa)
+
+beta_E
+beta_M
+beta_T
+beta_A
+
+```

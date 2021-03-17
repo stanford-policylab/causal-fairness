@@ -72,3 +72,8 @@ Discovery Through Propensity Score Analysis”. In: (Aug. 12, 2016). arXiv: 1608
 	*** Different goal: Estimating discerimination, not trying to resolve it 
 	
 
+Reading List
+*Chiappa 
+
+* Coston 2020 -- Counterfactual Risk Assessments, Evaluation, and Fairness
+* Kosuke Imai 2020 -- Principal Fairness

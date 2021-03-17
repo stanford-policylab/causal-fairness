@@ -1,0 +1,18 @@
+Papers
+
+
+Statistical parity (P.A iid of Y)
+Conditional statistical parity (P.A iid of Y | X)
+Predictive equality / Classification Parity
+Anti-classification (P.A not used)
+
+
+
+
+* Wang and Blei -- EO and AA-Fair definitions (#1)
+	* Kusner -- Counterfactual Fairness (#1)
+* Kilbertus -- Unresolved and Proxy discrimination (#1)
+* Nabi and Shpitser -- Unfair Causal pathways (#1)
+* Chiappa - Path-Specific Counterfactual Fairness (#1)
+* Kosuke Imai and Jiang -- Principle Fairness (#2)
+* Coston -- Counterfactual Risk Assessments (#3)
