@@ -1,38 +1,19 @@
----
-title: "Simulation 03"
-author: "Hamed Nilforoshan"
-date: "2/22/2021"
-output:
-  github_document:
-    pandoc_args: --webtex
----
-
-
-```{r setup, include=FALSE}
-library(sigmoid)
-library(tidymodels)
-library(tidyverse)
-library(furrr)
-library(nloptr)
-library(BBmisc)
-
-
-# Set number of workers.
-plan(multicore, workers = 4)
-
-# Set the ggplot theme.
-theme_set(theme_bw(base_size = 20))
-```
+Simulation 03
+================
+Hamed Nilforoshan
+2/22/2021
 
 ## Overview
 
-We construct a stylized example illustrating the sub-optimal outcomes of Wang and Blei's fairness definitions (Affirmative Action and Equal Opportunity) on utility. 
+We construct a stylized example illustrating the sub-optimal outcomes of
+Wang and Blei’s fairness definitions (Affirmative Action and Equal
+Opportunity) on utility.
 
 ## Setup
 
 Prints out the results of a given admissions method
-```{r trace_results}
 
+``` r
   print_results <- function(DF_TEST, DF_TEST_COL, N_ADMIT, RESULT_NAME){
     DF_TEST<-DF_TEST[order(DF_TEST_COL,decreasing=TRUE),]
 
@@ -43,13 +24,11 @@ Prints out the results of a given admissions method
   }
 ```
 
+A “book of life” is a draw of each potential outcome for a population of
+a given size. We’ll define a function that generates a book of life for
+a given set of parameters. T
 
-A "book of life" is a draw of each potential outcome for a population of a given
-size. We'll define a function that generates a book of life for a given set of
-parameters. T
-
-```{r book_of_life}
-
+``` r
 gen_book_of_life <- function(
   pop_size,
   frac_black,
@@ -145,13 +124,17 @@ gen_book_of_life <- function(
 }
 ```
 
-
 ## Initialize parameters and books of life
-We initialize the training population size for the book of life, the fraction of the population that is a minority (black), and the number of counterfactual draws when calculating affirmative action decisions.
 
-We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
+We initialize the training population size for the book of life, the
+fraction of the population that is a minority (black), and the number of
+counterfactual draws when calculating affirmative action decisions.
 
-```{r init}
+We then initial two books of life. One is for training our models, and
+the second is for testing what happens when the models are applied to a
+new, unseen dataset
+
+``` r
 POP_SIZE = 10000000
 POP_SIZE_TEST = 10000
 POP_SIZE_TEST_ADMIT = 2500
@@ -209,55 +192,103 @@ POP_SIZE_TEST_ADMIT = sum(df_test$A)
 
 df_train_ = filter(df_train, A == 1 )
 BLACK_ADMITS = sum(df_train_$R)
-
 ```
 
+## Use the biased admissions committee model as the baseline
 
-## Use the biased admissions committee model as the baseline 
-
-```{r ml_naive}
+``` r
 ml_naive <- glm(A ~ T + R, data = df_train, family = "binomial", control = list(maxit = 1000))
 
 df_test$ml_naive = plogis(predict(ml_naive,df_test))
 print_results(df_test, df_test$ml_naive, POP_SIZE_TEST_ADMIT, 'ML_NAIVE')
-
-summary(ml_naive)
-
-
 ```
 
+    ## Result Type:  ML_NAIVE 
+    ## Lives Saved:  276966 
+    ## Diverse Admits:  16
 
+``` r
+summary(ml_naive)
+```
+
+    ## 
+    ## Call:
+    ## glm(formula = A ~ T + R, family = "binomial", data = df_train, 
+    ##     control = list(maxit = 1000))
+    ## 
+    ## Deviance Residuals: 
+    ##     Min       1Q   Median       3Q      Max  
+    ## -2.8885  -0.9053  -0.3503   0.9511   3.5998  
+    ## 
+    ## Coefficients:
+    ##               Estimate Std. Error z value Pr(>|z|)    
+    ## (Intercept) -1.999e+00  1.919e-03 -1041.8   <2e-16 ***
+    ## T            3.997e-02  3.509e-05  1139.2   <2e-16 ***
+    ## R           -1.001e+00  2.644e-03  -378.5   <2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## (Dispersion parameter for binomial family taken to be 1)
+    ## 
+    ##     Null deviance: 13612200  on 9999999  degrees of freedom
+    ## Residual deviance: 10768260  on 9999997  degrees of freedom
+    ## AIC: 10768266
+    ## 
+    ## Number of Fisher Scoring iterations: 5
 
 ## Maximize on lives saved
 
-```{r ml_lives_max}
+``` r
 print_results(df_test, df_test$L_p, POP_SIZE_TEST_ADMIT, 'MAX_LIVES_SAVED')
-
 ```
 
-
-
-
+    ## Result Type:  MAX_LIVES_SAVED 
+    ## Lives Saved:  291902 
+    ## Diverse Admits:  313
 
 ## Use the outcomes model
 
-```{r ml_outcomes}
+``` r
 df_train_ = filter(df_train, A == 1 )
 
 ml_outcomes <- lm(L_p ~ T+R+E, data = df_train_)
 df_test$ml_outcomes = predict(ml_outcomes,df_test)
 
 print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
-
-summary(ml_outcomes)
-
-
 ```
 
-## Calculate the EO-Fair decision 
+    ## Result Type:  ML_Outcomes 
+    ## Lives Saved:  285775 
+    ## Diverse Admits:  289
 
-```{r ml_eo_fair}
+``` r
+summary(ml_outcomes)
+```
 
+    ## 
+    ## Call:
+    ## lm(formula = L_p ~ T + R + E, data = df_train_)
+    ## 
+    ## Residuals:
+    ##     Min      1Q  Median      3Q     Max 
+    ## -44.017  -6.025   0.000   6.019  46.208 
+    ## 
+    ## Coefficients:
+    ##               Estimate Std. Error   t value Pr(>|t|)    
+    ## (Intercept)  5.0265106  0.0124090   405.069   <2e-16 ***
+    ## T            1.5985757  0.0003981  4015.251   <2e-16 ***
+    ## R           -0.0040476  0.0209242    -0.193    0.847    
+    ## E           -0.6990400  0.0003269 -2138.252   <2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 8.959 on 4209910 degrees of freedom
+    ## Multiple R-squared:  0.8568, Adjusted R-squared:  0.8568 
+    ## F-statistic: 8.395e+06 on 3 and 4209910 DF,  p-value: < 2.2e-16
+
+## Calculate the EO-Fair decision
+
+``` r
 df_test_black = tibble(df_test)
 df_test_black$R=1
 df_test_white = tibble(df_test)
@@ -265,14 +296,15 @@ df_test_white$R=0
 df_test$ml_eo_fair = FRAC_BLACK*plogis(predict(ml_naive,df_test_black)) + (1-FRAC_BLACK)*plogis(predict(ml_naive,df_test_white))
 
 print_results(df_test, df_test$ml_eo_fair, POP_SIZE_TEST_ADMIT, 'ML_EO_Fair')
-
-
 ```
 
+    ## Result Type:  ML_EO_Fair 
+    ## Lives Saved:  278930 
+    ## Diverse Admits:  136
 
 ## Calculate the AA-Fair decision
 
-```{r aa_fair_model}
+``` r
 #Setup counterfactual probability distributions
 aa_probs_black <- df_train %>%
   count(R, T, T_black) %>%
@@ -311,8 +343,7 @@ return(AA_DECISION)
   }
 ```
 
-
-```{r ml_aa_fair_run}
+``` r
 df_test <- df_test %>% 
   rowwise() %>% 
   mutate(ml_aa_fair = AA_FAIR_MODEL(R,T))
@@ -320,9 +351,13 @@ df_test <- df_test %>%
 print_results(df_test, df_test$ml_aa_fair, POP_SIZE_TEST_ADMIT, 'ML_AA_Fair')
 ```
 
+    ## Result Type:  ML_AA_Fair 
+    ## Lives Saved:  271515 
+    ## Diverse Admits:  860
+
 ## Use the outcomes model with diversity constraint
 
-```{r ml_outcomes_diverse}
+``` r
 df_train_ = filter(df_train, A == 1 )
 
 ml_outcomes <- lm(L_p ~ T+R+E, data = df_train_)
@@ -338,14 +373,51 @@ df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>%
 N=859
 
 cat("Result Type: ", 'ML Outcomes Diverse','\n')
-cat("Lives Saved: ", sum(head(df_test_black,n=N)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-N)$L_p) ,'\n')
-cat("Diverse Admits: ", N,'\n')
-
-
-print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
-
-summary(ml_outcomes)
-
-
 ```
 
+    ## Result Type:  ML Outcomes Diverse
+
+``` r
+cat("Lives Saved: ", sum(head(df_test_black,n=N)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-N)$L_p) ,'\n')
+```
+
+    ## Lives Saved:  278347
+
+``` r
+cat("Diverse Admits: ", N,'\n')
+```
+
+    ## Diverse Admits:  859
+
+``` r
+print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
+```
+
+    ## Result Type:  ML_Outcomes 
+    ## Lives Saved:  285775 
+    ## Diverse Admits:  289
+
+``` r
+summary(ml_outcomes)
+```
+
+    ## 
+    ## Call:
+    ## lm(formula = L_p ~ T + R + E, data = df_train_)
+    ## 
+    ## Residuals:
+    ##     Min      1Q  Median      3Q     Max 
+    ## -44.017  -6.025   0.000   6.019  46.208 
+    ## 
+    ## Coefficients:
+    ##               Estimate Std. Error   t value Pr(>|t|)    
+    ## (Intercept)  5.0265106  0.0124090   405.069   <2e-16 ***
+    ## T            1.5985757  0.0003981  4015.251   <2e-16 ***
+    ## R           -0.0040476  0.0209242    -0.193    0.847    
+    ## E           -0.6990400  0.0003269 -2138.252   <2e-16 ***
+    ## ---
+    ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+    ## 
+    ## Residual standard error: 8.959 on 4209910 degrees of freedom
+    ## Multiple R-squared:  0.8568, Adjusted R-squared:  0.8568 
+    ## F-statistic: 8.395e+06 on 3 and 4209910 DF,  p-value: < 2.2e-16
