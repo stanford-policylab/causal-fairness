@@ -41,6 +41,15 @@ Prints out the results of a given admissions method
     cat("Diverse Admits: ", sum(head(DF_TEST,n=N_ADMIT)$D_p),'\n')
    
   }
+
+  return_results <- function(DF_TEST, DF_TEST_COL, N_ADMIT, RESULT_NAME){
+    DF_TEST<-DF_TEST[order(DF_TEST_COL,decreasing=TRUE),]
+    return(c(RESULT_NAME, sum(head(DF_TEST,n=N_ADMIT)$L_p), sum(head(DF_TEST,n=N_ADMIT)$D_p)/N_ADMIT))
+  }
+
+
+
+
 ```
 
 
@@ -220,6 +229,7 @@ ml_naive <- glm(A ~ T + R, data = df_train, family = "binomial", control = list(
 
 df_test$ml_naive = plogis(predict(ml_naive,df_test))
 print_results(df_test, df_test$ml_naive, POP_SIZE_TEST_ADMIT, 'ML_NAIVE')
+ML_NAIVE_RESULTS = return_results(df_test, df_test$ml_naive, POP_SIZE_TEST_ADMIT, 'ML Naive')
 
 summary(ml_naive)
 
@@ -244,7 +254,9 @@ print_results(df_test, df_test$L_p, POP_SIZE_TEST_ADMIT, 'MAX_LIVES_SAVED')
 ```{r ml_outcomes}
 df_train_ = filter(df_train, A == 1 )
 
-ml_outcomes <- lm(L_p ~ T+R+E, data = df_train_)
+#ml_outcomes <- lm(L_p ~ T+R+E, data = df_train_)
+
+ml_outcomes <- lm(L_p ~ T+R, data = df_train_)
 df_test$ml_outcomes = predict(ml_outcomes,df_test)
 
 print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
@@ -266,6 +278,7 @@ df_test$ml_eo_fair = FRAC_BLACK*plogis(predict(ml_naive,df_test_black)) + (1-FRA
 
 print_results(df_test, df_test$ml_eo_fair, POP_SIZE_TEST_ADMIT, 'ML_EO_Fair')
 
+ML_EO_FAIR_RESULTS = return_results(df_test, df_test$ml_eo_fair, POP_SIZE_TEST_ADMIT, 'ML EO Fair')
 
 ```
 
@@ -318,6 +331,8 @@ df_test <- df_test %>%
   mutate(ml_aa_fair = AA_FAIR_MODEL(R,T))
 
 print_results(df_test, df_test$ml_aa_fair, POP_SIZE_TEST_ADMIT, 'ML_AA_Fair')
+ML_AA_FAIR_RESULTS = return_results(df_test, df_test$ml_aa_fair, POP_SIZE_TEST_ADMIT, 'ML AA Fair')
+
 ```
 
 ## Use the outcomes model with diversity constraint
@@ -325,8 +340,12 @@ print_results(df_test, df_test$ml_aa_fair, POP_SIZE_TEST_ADMIT, 'ML_AA_Fair')
 ```{r ml_outcomes_diverse}
 df_train_ = filter(df_train, A == 1 )
 
-ml_outcomes <- lm(L_p ~ T+R+E, data = df_train_)
+ml_outcomes <- lm(L_p ~ T+R, data = df_train_)
+
+ml_outcomes_e <- lm(L_p ~ T+R+E, data = df_train_)
 df_test$ml_outcomes = predict(ml_outcomes,df_test)
+df_test$ml_outcomes_e = predict(ml_outcomes_e,df_test)
+
 
 df_test_black<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>%
   filter( R == 1 )
@@ -335,7 +354,7 @@ df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>%
   filter( R == 0 )
 
 
-N=859
+N=798
 
 cat("Result Type: ", 'ML Outcomes Diverse','\n')
 cat("Lives Saved: ", sum(head(df_test_black,n=N)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-N)$L_p) ,'\n')
@@ -345,6 +364,89 @@ cat("Diverse Admits: ", N,'\n')
 print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
 
 summary(ml_outcomes)
+
+
+```
+
+
+## Draw the pareto curve
+
+```{r pareto_curve}
+
+MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK
+pareto_ideal = NULL
+
+for (num_black_admit in seq(from=1,to=as.integer(MAX_BLACK_ADMIT),by=10)){
+  cat(num_black_admit)
+  frac_black = num_black_admit/POP_SIZE_TEST_ADMIT
+  
+  df_test_black<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved = sum(head(df_test_black,n=num_black_admit)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$L_p) 
+  
+  df_test_black<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved_outcomes = sum(head(df_test_black,n=num_black_admit)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$L_p) 
+  
+  df_test_black<- df_test[order(df_test$ml_outcomes_e,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$ml_outcomes_e,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved_outcomes_e = sum(head(df_test_black,n=num_black_admit)$L_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$L_p) 
+  
+  
+  pareto_ideal = rbind(pareto_ideal, data.frame(frac_black, lives_saved,lives_saved_outcomes, lives_saved_outcomes_e))
+}
+
+
+
+
+# ggplot colors
+peach <- "#F8766D"
+purple <- "#C77CFF"
+blue <- "#00BFC4"
+green <- "#00BE6C"
+browngreen <- "#A3A500"
+transparency <- 0.4
+labels = c("1", "2", "3", "4", "5")
+
+
+random_x <- 0.1
+random_y <- 280000 
+
+
+ML_EO_FAIR_RESULTS
+
+p <- ggplot() +
+  geom_line(data=pareto_ideal, aes(x=frac_black, y=lives_saved, color='Omniscient')) + 
+  geom_line(data=pareto_ideal, aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
+  geom_line(data=pareto_ideal, aes(x=frac_black, y=lives_saved_outcomes_e, color='ML Outcomes (Given T, R, E)')) + 
+  scale_x_continuous("% Black Admits", labels = scales::percent) + 
+  ylab("Lives Saved") +  
+  
+  geom_vline(xintercept = as.double(ML_NAIVE_RESULTS[[3]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_NAIVE_RESULTS[[2]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_NAIVE_RESULTS[[3]]), y = as.double(ML_NAIVE_RESULTS[[2]])), color = purple, size = 3) +
+  annotate("text", x = as.double(ML_NAIVE_RESULTS[[3]])+0.03, y = as.double(ML_NAIVE_RESULTS[[2]]) + 2, label = ML_NAIVE_RESULTS[[1]]) +
+  
+  geom_vline(xintercept = as.double(ML_AA_FAIR_RESULTS[[3]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_AA_FAIR_RESULTS[[2]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_AA_FAIR_RESULTS[[3]]), y = as.double(ML_AA_FAIR_RESULTS[[2]])), color = blue, size = 3) +
+  annotate("text", x = as.double(ML_AA_FAIR_RESULTS[[3]])-0.05, y = as.double(ML_AA_FAIR_RESULTS[[2]]) + 2, label = ML_AA_FAIR_RESULTS[[1]]) +
+  
+  geom_vline(xintercept = as.double(ML_EO_FAIR_RESULTS[[3]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_EO_FAIR_RESULTS[[2]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_EO_FAIR_RESULTS[[3]]), y = as.double(ML_EO_FAIR_RESULTS[[2]])), color = peach, size = 3) +
+  annotate("text", x = as.double(ML_EO_FAIR_RESULTS[[3]])+0.03, y = as.double(ML_EO_FAIR_RESULTS[[2]]) + 2, label = ML_EO_FAIR_RESULTS[[1]]) +
+  
+  
+  
+  scale_color_manual(
+      values = c(
+           'Omniscient'="red",
+           'ML Outcomes (Given T, R, E)'="blue",
+           'ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank())
+ggsave(plot=p, filename='./pareto_frontier.pdf', height=5, width=10)
+p
 
 
 ```

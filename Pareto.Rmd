@@ -1,0 +1,207 @@
+---
+title: Equitable Decision Making and Pareto Frontiers
+author: Chohlas-Wood, Coots, Brunskill, and Goel.
+date: February 12, 2021
+output:
+  github_document:
+    pandoc_args: --webtex
+---
+
+```{r setup}
+library(tidyverse)
+theme_set(theme_bw(base_size = 14))
+```
+
+## Overview
+
+We construct a simple example to highlight the tradeoffs inherent to many decision-making problems, and the value of adopting a consequentialist perspective for achieving equitable outcomes.
+
+## Population model
+
+We imagine a scenario in which we are deciding how to allocate limited transportation assistance to a population of patients with upcoming hospital appointments. We start by generating a population model, or "book of life." In this example, there are two patient groups -- $G_1$ and $G_2$ -- who may have different overall appearance rates, and who, on average, respond differently to the transportation assistance.
+
+```{r book_of_life}
+inv_logit <- function(x) {
+  return (exp(x)/(1+exp(x)))
+}
+gen_book_of_life <- function(
+  pop_size,
+  p_black,
+  beta_0_g2,
+  beta_1_g2,
+  beta_2_g2,
+  beta_0_g1,
+  beta_1_g1,
+  beta_2_g1
+) {
+  
+  # Appearance potential outcomes
+  p_appearance <- function(r, x, t) {
+    p <- inv_logit(
+      (1-r) * (beta_0_g1 + beta_1_g1 * x + beta_2_g1 * x * t) + 
+        r * (beta_0_g2 + beta_1_g2 * x + beta_2_g2 * x * t)
+    )
+    return(p)
+  }
+  
+  # Generate the book of life
+  num_g2 <- round(pop_size * p_g2)
+  book_of_life <- tibble(
+    R = sample(c(rep(0,num_g2), rep(1,pop_size-num_g2))),
+    X = runif(pop_size),
+    Y_0 = p_appearance(R, X, 0),
+    Y_1 = p_appearance(R, X, 1),
+    TE = Y_1 - Y_0
+  )
+  return(book_of_life)
+}
+```
+
+We consider a specific scenario in which: (1) there is an equal proportion of $G_1$ and $G_2$ patients; (2) the distribution of Y(0) -- appearance in the absence of transportation assistance -- is the same across the two groups; and (3) the average treatment effect (i.e., E[Y(1) - Y(0)]) is larger for $G_1$ patients. This may be the case if, hypothetically, transportation is less of a barrier for $G_2$ patients than for $G_1$ patients. 
+
+```{r pop_model}
+# params
+pop_size <- 1e3
+p_g2 <- 0.5
+beta_0_g2 <- -1
+beta_1_g2 <- 1
+beta_2_g2 <- 1
+beta_0_g1 <- -1
+beta_1_g1 <- 1
+beta_2_g1 <- 2
+# call
+set.seed(1)
+book <- gen_book_of_life(
+  pop_size, 
+  p_g2, 
+  beta_0_g2, 
+  beta_1_g2,
+  beta_2_g2, 
+  beta_0_g1, 
+  beta_1_g1, 
+  beta_2_g1)
+```
+
+The distribution of treatment effect across groups.
+
+``` {r tfx, fig.height = 5, fig.width = 7}
+# distribution of TE by race
+book %>% 
+  mutate(R = recode(R, "0" = "G1 patients", "1" = "G2 patients")) %>%
+  ggplot(aes(x = TE)) + 
+    geom_histogram(bins=10) + 
+    scale_y_continuous('Number of patients') +
+    scale_x_continuous('Treatment effect') +
+    facet_wrap(~R)
+```
+
+## Pareto frontiers
+
+Next we compute the Pareto frontier for a given population: the maximum expected appearances achievable for a given demographic composition of recipients of the transportation assistance. The optimal policy provides assistance to patients with the largest treatment effect, subject to the demographic and budget constraints. Here, we are interested in preserving a degree of demographic parity in the allocation of vouchers to members of $G_2$, since individuals in this group exhibit a lower treatment effect, on average. We specifically consider a scenario where up to 1/3 of patients receive assistance.
+
+```{r pareto_frontier}
+# given a book of life and budget, return a tibble with:
+#   (1) G2 patients treated (x-axis), 
+#   (2) expected appearance (y-axis)
+#   (3) FNR's for both groups -- to later compute optimal error-rate equalizing policy
+pareto_frontier <- function(book_of_life, budget) {
+  budget <- floor(budget * nrow(book_of_life))
+  
+  # needed to compute FNRs
+  TE_sum_g1 <- sum(filter(book_of_life, R == 0)$TE)
+  TE_sum_g2 <- sum(filter(book_of_life, R == 1)$TE)
+  
+  book_g1 <- book_of_life %>% 
+    filter(R==0) %>%
+    arrange(-TE) %>%
+    mutate(
+      appearances = cumsum(Y_1) + sum(Y_0) - cumsum(Y_0),
+      TE_treated = cumsum(TE)
+    ) %>%
+    with(tibble(
+      num_treated = 0:budget,
+      appearances = c(sum(Y_0), appearances[1:budget]),
+      TE_treated = c(0, TE_treated[1:budget])
+    ))
+  
+  book_g2 <- book_of_life %>% 
+    filter(R==1) %>%
+    arrange(-TE) %>%
+    mutate(
+      appearances = cumsum(Y_1) + sum(Y_0) - cumsum(Y_0),
+      TE_treated = cumsum(TE)
+    ) %>%
+    with(tibble(
+      num_treated = 0:budget,
+      appearances = c(sum(Y_0), appearances[1:budget]),
+      TE_treated = c(0, TE_treated[1:budget])
+    ))
+  
+  num_g2 <- sum(book_of_life$R)
+  pf <- tibble(
+    num_g2_treated = 0:budget,
+    appearances = book_g2$appearances + rev(book_g1$appearances),
+    addl_appearances = (book_g2$appearances + rev(book_g1$appearances)) - sum(book$Y_0),
+    p_g2 = num_g2_treated / num_g2,
+    FNR_g1 = 1 - (rev(book_g1$TE_treated) / TE_sum_g1),
+    FNR_g2 = 1 - (book_g2$TE_treated / TE_sum_g2)
+  )
+  return(pf)
+}
+budget = 1/3
+pf <- pareto_frontier(book, budget)
+```
+
+Finally, we plot the results, adding points for the utility-maximizing policy and various alternative allocation schemes.
+
+```{r pf_plot, fig.height=5, fig.width=8}
+# point corresponding to maximum appearances, regardles of demographic composition
+ndx <- which.max(pf$addl_appearances)
+max_x <- pf$p_g2[ndx]
+max_y <- pf$addl_appearances[ndx]
+# random allocation
+random_x <- budget
+# subtraction of sum(Y_0) is to correct for rescaling of y-axis to showing addl_appearances
+random_y <- sum(budget * book$Y_1 + (1 - budget) * book$Y_0) - sum(book$Y_0)  
+# demographic parity
+ndx <- which.min(abs(pf$p_g2 - budget))
+parity_x <- pf$p_g2[ndx]
+parity_y <- pf$addl_appearances[ndx]
+# utility-maximizing point for lambda = 0.01
+lambda <- 0.01
+ndx <- which.max(pf$addl_appearances/pop_size - 4 * lambda * abs(pf$p_g2 - budget))
+opt_x <- pf$p_g2[ndx]
+opt_y <- pf$addl_appearances[ndx]
+# FNR equality
+ndx <- which.min(abs(pf$FNR_g2 - pf$FNR_g1))
+FNR_x <- pf$p_g2[ndx]
+FNR_y <- pf$addl_appearances[ndx]
+# ggplot colors
+peach <- "#F8766D"
+purple <- "#C77CFF"
+blue <- "#00BFC4"
+green <- "#00BE6C"
+browngreen <- "#A3A500"
+transparency <- 0.4
+labels = c("1", "2", "3", "4", "5")
+p <- ggplot(data=pf, aes(x=p_g2, y=addl_appearances)) +
+  geom_line() + 
+  scale_x_continuous("Percent of patients in target group receiving transportation", labels = scales::percent) + 
+  ylab("Number of additional appearances") +  
+  theme(legend.title = element_blank())
+ggsave(plot=p, filename='./pareto_frontier.pdf', height=5, width=7)
+p
+```
+
+To gain intuition about the equal FNR policy, we plot the FNRs by group as a function of the percent of $G_2$ patients treated. When the curves are approximately linear (meaning there is relatively little within-group heterogeneity in treatment effect), then they are guaranteed to intersect near the budget.
+
+```{r fnr, fig.height=5, fig.width=7}
+pf %>%
+  pivot_longer(c(FNR_g1, FNR_g2), names_to = 'group', values_to = 'FNR') %>%
+  mutate(group = recode(group, 'FNR_g2' = 'G2 patients', 'FNR_g1' = 'G1 patients')) %>%
+  ggplot(aes(x=p_g2, y=FNR)) +
+    geom_line(aes(color=group)) +
+    scale_x_continuous("Percent of G2 patients receiving transportation", labels = scales::percent) + 
+    scale_y_continuous(labels = scales::percent) + 
+    theme(legend.title = element_blank())
+```
