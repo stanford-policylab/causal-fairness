@@ -258,6 +258,8 @@ BOOST = 0.0
 
 df_test$ml_outcomes = predict(ml_outcomes,df_test) + BOOST*df_test$R
 
+
+
 df_test_black = tibble(df_test)
 df_test_black$R=1
 df_test_black$T=df_test_black$T_black
@@ -318,6 +320,9 @@ ML_MAX_BOARDS_PASSAGE = return_results(df_test, df_test$ml_outcomes, POP_SIZE_TE
 
 
 ML_MAX_UTILITY = return_results(df_test, df_test$ml_outcomes_div, POP_SIZE_TEST_ADMIT, 'Max Utility')
+
+
+write.csv(df_test,'./df_test.csv')
 
 ```
 
