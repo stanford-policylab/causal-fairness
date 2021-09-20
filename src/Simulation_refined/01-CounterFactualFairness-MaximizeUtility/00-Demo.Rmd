@@ -96,7 +96,7 @@ gen_book_of_life <- function(
 
   f_T <- function(m_i, e_i, noise){
   #Hans: less controversial (to get not 1 or 0)
-  return(round(t_0 + t_m*m_i + t_e*e_i + 0.01*e_i*m_i + noise ,digits=1))
+  return(round(t_0 + t_m*m_i + t_e*e_i + 0.01*e_i*m_i + noise ,digits=0))
 
   #  return(round(t_0 + t_m*m_i + t_e*e_i + noise ,digits=1))
 ### Hans: to get not 1 or 0 
@@ -136,7 +136,7 @@ gen_book_of_life <- function(
       T_noise = rnorm(pop_size, mean = 0, sd = t_noise), #Medical school preparation
       T_black = f_T(M_black, E_black, noise=T_noise),
       T_white = f_T(M_white, E_white, noise=T_noise),
-      
+
       E = if_else(R==1,E_black,E_white),
       M = if_else(R==1,M_black,M_white),
       T = if_else(R==1,T_black,T_white),
@@ -177,11 +177,11 @@ We then initial two books of life. One is for training our models, and the secon
 
 ```{r init}
 POP_SIZE = 10000000
-POP_SIZE_TEST = 100000
+POP_SIZE_TEST = 10000
 POP_SIZE_TEST_ADMIT = 2500
 FRAC_BLACK = 0.2
 COUNTER_FACTUAL_SAMPLE = 10000
-BOARD_PASS_CUTOFF = 0.75
+BOARD_PASS_CUTOFF =  0.50
 
 E_0 = 50
 E_R = -50
@@ -250,14 +250,13 @@ HUMAN_RESULTS_NON_RANDOM = return_results(df_test, df_test$A_prob, POP_SIZE_TEST
 ```{r ml_outcomes}
 df_train_ = filter(df_train, A == 1 )
 
-ml_outcomes <- glm(B_p ~ T+R+T*R, data = df_train_)
+ml_outcomes <- glm(B_p ~ T+R+T*R, data = df_train_, family = binomial)
 
 summary(ml_outcomes)
 
 BOOST = 0.0
 
-df_test$ml_outcomes = predict(ml_outcomes,df_test) + BOOST*df_test$R
-
+df_test$ml_outcomes = predict(ml_outcomes,df_test, type = "response") #+ BOOST*df_test$R
 
 
 df_test_black = tibble(df_test)
@@ -322,15 +321,48 @@ ML_MAX_BOARDS_PASSAGE = return_results(df_test, df_test$ml_outcomes, POP_SIZE_TE
 ML_MAX_UTILITY = return_results(df_test, df_test$ml_outcomes_div, POP_SIZE_TEST_ADMIT, 'Max Utility')
 
 
-write.csv(df_test,'./df_test.csv')
+write.csv(df_test,'./df_test_.csv')
 
 ```
+
 
 ## Use the outcomes model with diversity constraint
 
 ```{r ml_outcomes_diverse}
 
 N=round(POP_SIZE_TEST_ADMIT*FRAC_BLACK)
+
+```
+
+
+
+## Look at probabillity distributions by race
+
+```{r ml_outcomes_diverse}
+
+df_test$ml_outcomes_round = round(df_test$ml_outcomes,2) + df_test$R * 0.5
+
+df_test_view <- df_test %>%
+  group_by(ml_outcomes_round, R) %>%
+  summarise_at(vars(B_p), funs(mean(., na.rm=TRUE)))
+
+
+ggplot(df_test_view) +
+geom_line(aes(x = ml_outcomes_round, y = B_p), color = "steelblue", linetype="twodash") + 
+facet_grid(c("R")) 
+
+
+ggplot() + 
+  geom_density(data=df_test, aes(x=ml_outcomes_round),alpha=0.5, adjust=2) + 
+  xlab("MEI") +
+  ylab("Density")
+
+
+ggplot() + 
+  geom_density(data=df_test, aes(x=ml_outcomes_round, group=factor(R), color=factor(R)), adjust=2) + 
+  xlab("Expected Contribution to Utility") +
+  ylab("Density")+
+  theme_classic()
 
 ```
 
@@ -411,10 +443,6 @@ p <- ggplot() +
   scale_x_continuous("% Black Admits", labels = scales::percent) + 
   ylab("# Boards Passages") +  
   
-  geom_vline(xintercept = as.double(ML_BOOST_1[[3]]), linetype = "dashed", colour = green, alpha=transparency) +
-  geom_hline(yintercept = as.double(ML_BOOST_1[[4]]), linetype = "dashed", colour = green, alpha=transparency) +
-  geom_point(aes(x = as.double(ML_BOOST_1[[3]]), y = as.double(ML_BOOST_1[[4]])), color = green, size = 3) +
-  annotate("text", x = as.double(ML_BOOST_1[[3]])+0.02, y = as.double(ML_BOOST_1[[4]]) + 2, label = ML_BOOST_1[[1]]) +
 
   geom_vline(xintercept = as.double(ML_BOOST_2[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
   geom_hline(yintercept = as.double(ML_BOOST_2[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
