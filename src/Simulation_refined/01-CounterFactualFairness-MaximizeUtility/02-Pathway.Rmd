@@ -180,8 +180,8 @@ We initialize the training population size for the book of life, the fraction of
 We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
 
 ```{r init}
-POP_SIZE = 10000000
-POP_SIZE_TEST = 100000
+POP_SIZE = 10000000*0.1
+POP_SIZE_TEST = 100000*0.1
 POP_SIZE_TEST_ADMIT = 2500
 FRAC_BLACK = 0.2
 COUNTER_FACTUAL_SAMPLE = 10000

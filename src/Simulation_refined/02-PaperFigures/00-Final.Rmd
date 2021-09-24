@@ -75,19 +75,21 @@ gen_book_of_life <- function(
   a_0,
   a_t,
   a_r,
+  a_i,
   i_noise,
-  A_NORMALIZE_MIN, 
-  A_NORMALIZE_MAX,
   ...
 ) {
   
   # Define the structural equations.
   f_E <- function(r_i, noise){
-    return(round(e_0 + e_r*r_i + noise,digits=1))
+    return(e_0 + e_r*r_i + noise)
+#    return(round(e_0 + e_r*r_i + noise,digits=1))
   }
   
   f_M <- function(e_i, noise){
-    return(round(m_0 + m_e*e_i + noise,digits=1))
+    return(m_0 + m_e*e_i + noise)
+
+#    return(round(m_0 + m_e*e_i + noise,digits=1))
   }
 
   f_T <- function(m_i, e_i, noise){
@@ -95,12 +97,12 @@ gen_book_of_life <- function(
 
   }
   
-  f_A_raw <- function(t_i, r_i, i_i){
-    return(a_t*t_i + a_r*r_i + a_0 + i_i)
+  f_A_raw <- function(t_i, r_i, i_i, a_i){
+    return(a_t*t_i + a_r*r_i + a_0 + a_i*i_i)
   }
   
-  f_A <- function(t_i, r_i, i_i){
-    return(sigmoid(a_t*t_i + a_r*r_i + a_0 + i_i))
+  f_A <- function(t_i, r_i, i_i, a_i){
+    return(sigmoid(a_t*t_i + a_r*r_i + a_0 + a_i*i_i))
   }
 
   # Generate the book of life.
@@ -123,22 +125,28 @@ gen_book_of_life <- function(
       T_black = f_T(M_black, E_black, noise=T_noise),
       T_white = f_T(M_white, E_white, noise=T_noise),
       
+      T_white_star = f_T(M_black, E_white, noise=T_noise),
+      T_black_star = f_T(M_white, E_black, noise=T_noise),
+
+      
       E = if_else(R==1,E_black,E_white),
       M = if_else(R==1,M_black,M_white),
       T = if_else(R==1,T_black,T_white),
       
-      A_raw = f_A_raw(T, R,I_noise), # Admissions Committee Decision 
-      A_raw_black = f_A_raw(T_black, 1,I_noise), # Admissions Committee Decision 
-      A_raw_white = f_A_raw(T_white, 0,I_noise), # Admissions Committee Decision 
+      A_raw = f_A_raw(T, R,I_noise,a_i), # Admissions Committee Decision 
+      A_raw_black = f_A_raw(T_black, 1,I_noise,a_i), # Admissions Committee Decision 
+      A_raw_white = f_A_raw(T_white, 0,I_noise,a_i), # Admissions Committee Decision 
 
-      A_prob = f_A(T,R,I_noise),
+      A_prob = f_A(T,R,I_noise,a_i),
       #A_prob_black = f_A(T_black, 1), # Admissions Committee Decision,
       #A_prob_white = f_A(T_white, 0), # Admissions Committee Decision 
       A = as.integer(runif(pop_size,min=0,max=1) < A_prob),
       
       # Generate potential outcomes
       L_p = M, # Lives saved if admitted
-      B_p = ifelse(M > quantile(M,BOARD_PASS_CUTOFF), 1,0),
+      B_p = rbernoulli(pop_size,sigmoid(M)),
+      B_p_raw = sigmoid(M),
+
       D_p = R , # Added diversity if admitted  
       
       # Generate observed outcomes
@@ -160,26 +168,27 @@ We then initial two books of life. One is for training our models, and the secon
 
 POP_SIZE = 10000000
 POP_SIZE_TEST = 100000
-FRAC_BLACK = 0.2
+FRAC_BLACK = 0.5
 COUNTER_FACTUAL_SAMPLE = 10000
 BOARD_PASS_CUTOFF = 0.75
 DISCRETE = TRUE
 
-E_0 = 50
-E_R = -50
-E_NOISE = 30
-M_0 = 25
-M_E = 0.5
-M_NOISE = 20
-T_0 = 0
-T_M = 0.5
-T_E = 0.5
-T_E_M = 0.01
+E_0 = 1
+E_R = -1
+E_NOISE = 1
+M_0 = 0
+M_E = 1
+M_NOISE = 1
+T_0 = 50
+T_M = 4
+T_E = 4
+T_E_M = 1.0
 T_NOISE = 5
-I_NOISE = 0.5
-A_0 = -3.75
-A_T = 0.04
-A_R = -1
+I_NOISE = 1.0
+A_0 = -2.0
+A_T = 1.0/50.0
+A_R = 0.33
+A_I = 0.33
 
 df_train <-gen_book_of_life(pop_size=POP_SIZE,
                             frac_black=FRAC_BLACK,
@@ -198,7 +207,8 @@ df_train <-gen_book_of_life(pop_size=POP_SIZE,
                             i_noise=I_NOISE,
                             a_0=A_0,
                             a_t=A_T,
-                            a_r=A_R)
+                            a_r=A_R,
+                            a_i=A_I)
 
 df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
                             frac_black=FRAC_BLACK,
@@ -217,7 +227,8 @@ df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
                             i_noise=I_NOISE,
                             a_0=A_0,
                             a_t=A_T,
-                            a_r=A_R)
+                            a_r=A_R,
+                            a_i=A_I)
 
 
 POP_SIZE_TEST_ADMIT = sum(df_test$A)
@@ -230,7 +241,6 @@ BLACK_ADMITS = sum(df_train_$R)
 
 HUMAN_RESULTS = return_results(df_test, df_test$A, POP_SIZE_TEST_ADMIT, 'Human Decision')
 HUMAN_RESULTS_NON_RANDOM = return_results(df_test, df_test$A_prob, POP_SIZE_TEST_ADMIT, 'Human Decision')
-
 ```
 
 
@@ -291,13 +301,11 @@ ML_BOOST_2 = return_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, '
 CF_UNFAIRNESS = mean(abs(df_c$'admit_rate' - df_c$'cf.admit_rate'))
 
 
-
-
 print_results(df_test, df_test$ml_outcomes, POP_SIZE_TEST_ADMIT, 'ML_Outcomes')
 
 summary(ml_outcomes)
 
-df_test$ml_outcomes_div = df_test$ml_outcomes + 0.275*df_test$R
+df_test$ml_outcomes_div = df_test$ml_outcomes + 0.13*df_test$R
 
 THRESHOLD = quantile(df_test$ml_outcomes_div, 1-FRAC_ADMIT) 
 df_test$ml_outcomes_div_decision = ifelse(df_test$ml_outcomes_div >= THRESHOLD,1.0,0.0)
@@ -325,12 +333,9 @@ write.csv(df_test,'./df_test.csv')
 
 
 
-
-
-
 for (coeff in 0:200) {
  
-  max_weight = -0.70
+  max_weight = -0.2
   weight_r = max_weight * coeff/200
   
   df_test$ml_outcomes_pred_par = df_test$ml_outcomes + weight_r*df_test$R
@@ -407,39 +412,12 @@ ggplot() +
 
 
 
-## Calculate if a decision policy is Counterfactually Fair 
-
-```{r ml_eo_fair}
-
-
-
-cfCheck <- function(df_check) {
-  B_p = 'B_p'
-  R = 'R'
-  A = 'A'
-  A_max = 'A_max'
-  E='E'
-  T='T'
-  
- 
- df_check_ <- df_check[,c(A_max, R, B_p, T)]  %>% 
- group_by(R, T, B_p) %>%
- summarize(admit_rate = mean(A_max))  %>% pivot_wider( names_from = R, values_from = admit_rate)  %>% drop_na()
- return(mean(df_check_$'0' - df_check_$'1'))
-  
-  
-}
-
-
-
-```
-
 ## Draw the pareto curve
 
 ```{r pareto_curve}
-N=round(POP_SIZE_TEST_ADMIT*FRAC_BLACK)
+N=round(POP_SIZE_TEST_ADMIT)  * FRAC_BLACK 
 
-MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK
+MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK 
 pareto_ideal = NULL
 
 for (num_black_admit in seq(from=1,to=as.integer(N+10),by=as.integer(N/50))){
@@ -474,10 +452,11 @@ labels = c("1", "2", "3", "4", "5")
 random_x <- 0.1
 random_y <- 280000 
 
-
-EO_FAIR = c('Counterfactual Equalized Odds', 21017, 0.12221, 21017)
-CF_FAIR = c('Counterfactual Fairness', 9635, 0.20, 9635)
-RANDOM = c('Random Admissions', 6211, 0.20, 6211)
+PC_FAIR2 = c('Path-Specific Counterfactual Fairness (O=R)', 27124, 0.3968, 27479.46)
+PC_FAIR = c('Path-Specific Counterfactual Fairness (O=R,T)', 19470, 0.498, 19470)
+EO_FAIR = c('Counterfactual Equalized Odds', 27124, 0.4567, 27124)
+CF_FAIR = c('Counterfactual Fairness', 19465, 0.498, 19465)
+RANDOM = c('Random Admissions', 14770, 0.50, 14770)
 
 p <- ggplot() +
   geom_line(data=pareto_ideal, aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
@@ -487,30 +466,30 @@ p <- ggplot() +
   geom_vline(xintercept = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), linetype = "dashed", colour = peach, alpha=transparency) +
   geom_hline(yintercept = as.double(ML_MAX_BOARDS_PASSAGE[[4]]), linetype = "dashed", colour = peach, alpha=transparency) +
   geom_point(aes(x = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
-  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])+0.052, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]]) + 2, label = ML_MAX_BOARDS_PASSAGE[[1]]) +
+  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])+0.05, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]]) , label = ML_MAX_BOARDS_PASSAGE[[1]]) +
 
   geom_vline(xintercept = as.double(ML_MAX_UTILITY[[3]]), linetype = "dashed", colour = blue, alpha=transparency) +
   geom_hline(yintercept = as.double(ML_MAX_UTILITY[[4]]), linetype = "dashed", colour = blue, alpha=transparency) +
   geom_point(aes(x = as.double(ML_MAX_UTILITY[[3]]), y = as.double(ML_MAX_UTILITY[[4]])), color = blue, size = 3) +
-  annotate("text", x = as.double(ML_MAX_UTILITY[[3]])+0.03, y = as.double(ML_MAX_UTILITY[[4]]) + 2, label = ML_MAX_UTILITY[[1]]) +
+  annotate("text", x = as.double(ML_MAX_UTILITY[[3]])+0.07, y = as.double(ML_MAX_UTILITY[[4]]) + 2, label = ML_MAX_UTILITY[[1]]) +
   
-    geom_vline(xintercept = as.double(ML_PREDICT_PAR[[3]]), linetype = "dashed", colour = green, alpha=transparency) +
-  geom_hline(yintercept = as.double(ML_PREDICT_PAR[[4]]), linetype = "dashed", colour = green, alpha=transparency) +
-  geom_point(aes(x = as.double(ML_PREDICT_PAR[[3]]), y = as.double(ML_PREDICT_PAR[[4]])), color = green, size = 3) +
-  annotate("text", x = as.double(ML_PREDICT_PAR[[3]])+0.05, y = as.double(ML_PREDICT_PAR[[4]]) - 50, label = ML_PREDICT_PAR[[1]]) +
+ # geom_vline(xintercept = as.double(ML_PREDICT_PAR[[3]]), linetype = "dashed", colour = green, alpha=transparency) +
+ # geom_hline(yintercept = as.double(ML_PREDICT_PAR[[4]]), linetype = "dashed", colour = green, alpha=transparency) +
+ # geom_point(aes(x = as.double(ML_PREDICT_PAR[[3]]), y = as.double(ML_PREDICT_PAR[[4]])), color = green, size = 3) +
+ # annotate("text", x = as.double(ML_PREDICT_PAR[[3]])+0.08, y = as.double(ML_PREDICT_PAR[[4]]) - 50, label = ML_PREDICT_PAR[[1]]) +
 
   
   
-      geom_vline(xintercept = as.double(EO_FAIR[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
-  geom_hline(yintercept = as.double(EO_FAIR[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
-  geom_point(aes(x = as.double(EO_FAIR[[3]]), y = as.double(EO_FAIR[[4]])), color = browngreen, size = 3) +
-  annotate("text", x = as.double(EO_FAIR[[3]]), y = as.double(EO_FAIR[[4]]) - 50, label = EO_FAIR[[1]]) +
+      geom_vline(xintercept = as.double(PC_FAIR2[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+  geom_hline(yintercept = as.double(PC_FAIR2[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+  geom_point(aes(x = as.double(PC_FAIR2[[3]]), y = as.double(PC_FAIR2[[4]])), color = browngreen, size = 3) +
+  annotate("text", x = as.double(PC_FAIR2[[3]])-0.06, y = as.double(PC_FAIR2[[4]]) - 300, label = PC_FAIR2[[1]]) +
 
   
-        geom_vline(xintercept = as.double(CF_FAIR[[3]]), linetype = "dashed", colour = purple, alpha=transparency) +
-  geom_hline(yintercept = as.double(CF_FAIR[[4]]), linetype = "dashed", colour = purple, alpha=transparency) +
-  geom_point(aes(x = as.double(CF_FAIR[[3]]), y = as.double(CF_FAIR[[4]])), color = purple, size = 3) +
-  annotate("text", x = as.double(CF_FAIR[[3]])-0.05, y = as.double(CF_FAIR[[4]]) - 50, label = CF_FAIR[[1]]) +
+  geom_vline(xintercept = as.double(PC_FAIR[[3]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_hline(yintercept = as.double(PC_FAIR[[4]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_point(aes(x = as.double(PC_FAIR[[3]]), y = as.double(PC_FAIR[[4]])), color = purple, size = 3) +
+  annotate("text", x = as.double(PC_FAIR[[3]])-0.20, y = as.double(PC_FAIR[[4]]) - 50, label = PC_FAIR[[1]]) +
 
     
   geom_vline(xintercept = as.double(RANDOM[[3]]), linetype = "dashed", colour = darkgreen, alpha=transparency) +
