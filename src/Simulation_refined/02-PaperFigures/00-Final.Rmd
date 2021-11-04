@@ -165,7 +165,7 @@ We initialize the training population size for the book of life, the fraction of
 We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
 
 ```{r init}
-
+set.seed(44)
 POP_SIZE = 10000000
 POP_SIZE_TEST = 100000
 FRAC_BLACK = 0.5
@@ -187,7 +187,7 @@ T_NOISE = 5
 I_NOISE = 1.0
 A_0 = -2.0
 A_T = 1.0/50.0
-A_R = 0.33
+A_R = -0.33
 A_I = 0.33
 
 df_train <-gen_book_of_life(pop_size=POP_SIZE,
@@ -241,6 +241,26 @@ BLACK_ADMITS = sum(df_train_$R)
 
 HUMAN_RESULTS = return_results(df_test, df_test$A, POP_SIZE_TEST_ADMIT, 'Human Decision')
 HUMAN_RESULTS_NON_RANDOM = return_results(df_test, df_test$A_prob, POP_SIZE_TEST_ADMIT, 'Human Decision')
+
+
+df_train%>% select(R, A) %>%
+ group_by(R) %>%
+ summarize(admit_rate = mean(A))
+
+```
+
+
+## Use the biased admissions committee model as the baseline 
+
+```{r ml_naive}
+ml_naive <- glm(A ~ T + R + I_noise, data = df_train, family = "binomial", control = list(maxit = 1000))
+
+df_test$ml_naive = plogis(predict(ml_naive,df_test))
+print_results(df_test, df_test$ml_naive, POP_SIZE_TEST_ADMIT, 'ML_NAIVE')
+ML_NAIVE_RESULTS = return_results(df_test, df_test$ml_naive, POP_SIZE_TEST_ADMIT, 'ML Naive')
+
+summary(ml_naive)
+
 ```
 
 
@@ -249,7 +269,7 @@ HUMAN_RESULTS_NON_RANDOM = return_results(df_test, df_test$A_prob, POP_SIZE_TEST
 ```{r ml_outcomes}
 df_train_ = filter(df_train, A == 1 )
 
-ml_outcomes <- glm(B_p ~ T+R+T*R, data = df_train_, family = binomial)
+ml_outcomes <- glm(B_p ~ T+R, data = df_train_, family = binomial)
 #ml_outcomes <- glm(B_p ~ T+R+T*R, data = df_train_)
 
 summary(ml_outcomes)
@@ -271,9 +291,9 @@ df_test$ml_outcomes_white = predict(ml_outcomes,df_test_white)  + BOOST*df_test_
 
 
 THRESHOLD = quantile(df_test$ml_outcomes, 1 - FRAC_ADMIT) 
-df_test$ml_outcomes_decision = ifelse(df_test$ml_outcomes >= THRESHOLD,1.0,0.0)
-df_test$ml_outcomes_decision_black = ifelse(df_test$ml_outcomes_black >= THRESHOLD,1.0,0.0)
-df_test$ml_outcomes_decision_white = ifelse(df_test$ml_outcomes_white >= THRESHOLD,1.0,0.0)
+df_test$ml_outcomes_decision = ifelse(df_test$ml_outcomes > THRESHOLD,1.0,0.0)
+df_test$ml_outcomes_decision_black = ifelse(df_test$ml_outcomes_black > THRESHOLD,1.0,0.0)
+df_test$ml_outcomes_decision_white = ifelse(df_test$ml_outcomes_white > THRESHOLD,1.0,0.0)
 df_test$ml_outcomes_decision_counterfactual = ifelse(df_test$R==1,df_test$ml_outcomes_decision_white, df_test$ml_outcomes_decision_black)
 
 df_test$R = sapply(df_test$R, as.numeric)
@@ -335,7 +355,7 @@ write.csv(df_test,'./df_test.csv')
 
 for (coeff in 0:200) {
  
-  max_weight = -0.2
+  max_weight = -0.3
   weight_r = max_weight * coeff/200
   
   df_test$ml_outcomes_pred_par = df_test$ml_outcomes + weight_r*df_test$R
@@ -390,31 +410,36 @@ df_pred_par_ml_outcomes_div
 
 ```{r ml_outcomes_diverse}
 
-df_test$ml_outcomes_round = round(df_test$ml_outcomes,2)# + df_test$R * 0.5
+df_test$B_p_util = df_test$B_p_raw + df_test$R * 0.13
+
+df_test$ml_outcomes_round = round(df_test$ml_outcomes,1) + df_test$R * 0.13
 
 df_test_view <- df_test %>%
   group_by(ml_outcomes_round, R) %>%
-  summarise_at(vars(B_p), funs(mean(., na.rm=TRUE)))
+  summarise_at(vars(B_p_util), funs(mean(., na.rm=TRUE)))
 
+df_test_view$color = df_test_view
 
 ggplot(df_test_view) +
-geom_line(aes(x = ml_outcomes_round, y = B_p), color = "steelblue", linetype="twodash") + 
+geom_line(aes(x = ml_outcomes_round, y = B_p_util, color = factor(as.factor(R))), linetype="twodash") + 
 facet_grid(c("R")) 
 
 
 ggplot() + 
-  geom_density(data=df_test, aes(x=ml_outcomes_round, group=factor(R), color=factor(R)), adjust=2) + 
-  xlab("Expected Contribution to Utility") +
+  geom_density(data=df_test, aes(x=B_p_raw, group=factor(R), color=factor(R)), adjust=2) + 
+  xlab("Contribution to Utility") +
   ylab("Density")+
   theme_classic()
 
 ```
 
 
-
 ## Draw the pareto curve
 
-```{r pareto_curve}
+```{r pareto_curve_00}
+
+HUMAN_RESULTS
+
 N=round(POP_SIZE_TEST_ADMIT)  * FRAC_BLACK 
 
 MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK 
@@ -448,25 +473,182 @@ darkgreen <- "#006400"
 transparency <- 0.4
 labels = c("1", "2", "3", "4", "5")
 
-
-random_x <- 0.1
-random_y <- 280000 
-
-PC_FAIR2 = c('Path-Specific Counterfactual Fairness (O=R)', 27124, 0.3968, 27479.46)
-PC_FAIR = c('Path-Specific Counterfactual Fairness (O=R,T)', 19470, 0.498, 19470)
-EO_FAIR = c('Counterfactual Equalized Odds', 27124, 0.4567, 27124)
-CF_FAIR = c('Counterfactual Fairness', 19465, 0.498, 19465)
-RANDOM = c('Random Admissions', 14770, 0.50, 14770)
-
 p <- ggplot() +
-  geom_line(data=pareto_ideal, aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
+  geom_smooth(data=pareto_ideal, se=FALSE,aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
   scale_x_continuous("% Black Admits", labels = scales::percent) + 
   ylab("# Boards Passages") +  
   
   geom_vline(xintercept = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), linetype = "dashed", colour = peach, alpha=transparency) +
   geom_hline(yintercept = as.double(ML_MAX_BOARDS_PASSAGE[[4]]), linetype = "dashed", colour = peach, alpha=transparency) +
   geom_point(aes(x = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
-  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])+0.05, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]]) , label = ML_MAX_BOARDS_PASSAGE[[1]]) +
+  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])-0.10, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]]) , label = ML_MAX_BOARDS_PASSAGE[[1]]) +
+
+  geom_vline(xintercept = as.double(ML_MAX_UTILITY[[3]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_MAX_UTILITY[[4]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_MAX_UTILITY[[3]]), y = as.double(ML_MAX_UTILITY[[4]])), color = blue, size = 3) +
+  annotate("text", x = as.double(ML_MAX_UTILITY[[3]])-0.05, y = as.double(ML_MAX_UTILITY[[4]]) + 2, label = ML_MAX_UTILITY[[1]]) +
+  
+  geom_vline(xintercept = as.double(HUMAN_RESULTS[[3]]), linetype = "dashed", colour = darkgreen, alpha=transparency) +
+  geom_hline(yintercept = as.double(HUMAN_RESULTS[[4]]), linetype = "dashed", colour = darkgreen, alpha=transparency) +
+  geom_point(aes(x = as.double(HUMAN_RESULTS[[3]]), y = as.double(HUMAN_RESULTS[[4]])), color = darkgreen, size = 3) +
+  annotate("text", x = as.double(HUMAN_RESULTS[[3]])-0.1, y = as.double(HUMAN_RESULTS[[4]]) - 50, label = HUMAN_RESULTS[[1]]) +
+  
+  geom_vline(xintercept = as.double(ML_NAIVE_RESULTS[[3]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_NAIVE_RESULTS[[4]]), linetype = "dashed", colour = purple, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_NAIVE_RESULTS[[3]]), y = as.double(ML_NAIVE_RESULTS[[4]])), color = purple, size = 3) +
+  annotate("text", x = as.double(ML_NAIVE_RESULTS[[3]])-0.07, y = as.double(ML_NAIVE_RESULTS[[4]]) - 50, label = ML_NAIVE_RESULTS[[1]]) +
+
+  
+  scale_color_manual(
+      values = c(
+           'Omniscient'="red",
+           'ML Outcomes (Given T, R, E)'="blue",
+           'ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank())
+ggsave(plot=p, filename='./00.pdf', height=5, width=10)
+p
+
+
+```
+
+
+
+## Draw the pareto curve
+
+```{r pareto_curve}
+N=round(POP_SIZE_TEST_ADMIT)  * FRAC_BLACK 
+
+MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK 
+pareto_ideal = NULL
+
+for (num_black_admit in seq(from=1,to=as.integer(N+10),by=as.integer(N/25))){
+  cat(num_black_admit)
+  frac_black = num_black_admit/POP_SIZE_TEST_ADMIT
+  
+  df_test_black<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved = sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p) 
+  
+  df_test_black<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved_outcomes = sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p) 
+  
+  pareto_ideal = rbind(pareto_ideal, data.frame(frac_black, lives_saved,lives_saved_outcomes))
+}
+
+
+
+
+# ggplot colors
+peach <- "#F8766D"
+purple <- "#C77CFF"
+blue <- "#00BFC4"
+green <- "#00BE6C"
+browngreen <- "#A3A500"
+darkgreen <- "#006400"
+transparency <- 0.4
+labels = c("1", "2", "3", "4", "5")
+
+
+random_x <- 0.1
+random_y <- 280000 
+
+EO_FAIR = c('Counterfactual Equalized Odds\n(Principal Fairness)', 22666.55298518955,  0.45276453833690733, 22666.55298518955)
+
+p <- ggplot() +
+  geom_smooth(data=pareto_ideal, se=FALSE,aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
+  scale_x_continuous("% Black Admits", labels = scales::percent) + 
+  ylab("# Boards Passages") +  
+  
+  geom_vline(xintercept = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_MAX_BOARDS_PASSAGE[[4]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
+  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])+0.05, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])-50 , label = ML_MAX_BOARDS_PASSAGE[[1]]) +
+
+  geom_vline(xintercept = as.double(ML_MAX_UTILITY[[3]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_MAX_UTILITY[[4]]), linetype = "dashed", colour = blue, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_MAX_UTILITY[[3]]), y = as.double(ML_MAX_UTILITY[[4]])), color = blue, size = 3) +
+  annotate("text", x = as.double(ML_MAX_UTILITY[[3]])-0.05, y = as.double(ML_MAX_UTILITY[[4]]) + 2, label = ML_MAX_UTILITY[[1]]) +
+  
+  geom_vline(xintercept = as.double(ML_PREDICT_PAR[[3]]), linetype = "dashed", colour = green, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_PREDICT_PAR[[4]]), linetype = "dashed", colour = green, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_PREDICT_PAR[[3]]), y = as.double(ML_PREDICT_PAR[[4]])), color = green, size = 3) +
+  annotate("text", x = as.double(ML_PREDICT_PAR[[3]])+0.08, y = as.double(ML_PREDICT_PAR[[4]]) - 50, label = ML_PREDICT_PAR[[1]]) +
+  
+    
+  geom_vline(xintercept = as.double(EO_FAIR[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+  geom_hline(yintercept = as.double(EO_FAIR[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+  geom_point(aes(x = as.double(EO_FAIR[[3]]), y = as.double(EO_FAIR[[4]])), color = browngreen, size = 3) +
+  annotate("text", x = as.double(EO_FAIR[[3]])-0.08, y = as.double(EO_FAIR[[4]]) + 25, label = EO_FAIR[[1]]) +
+
+  
+  scale_color_manual(
+      values = c(
+           'Omniscient'="red",
+           'ML Outcomes (Given T, R, E)'="blue",
+           'ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank())
+ggsave(plot=p, filename='./01_analogues.pdf', height=5, width=10)
+p
+
+
+```
+
+
+
+## Draw the pareto curve
+
+```{r pareto_curve_02}
+N=round(POP_SIZE_TEST_ADMIT)  * FRAC_BLACK 
+
+MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK 
+pareto_ideal = NULL
+
+for (num_black_admit in seq(from=1,to=as.integer(N+10),by=as.integer(N/25))){
+  cat(num_black_admit)
+  frac_black = num_black_admit/POP_SIZE_TEST_ADMIT
+  
+  df_test_black<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved = sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p) 
+  
+  df_test_black<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 1 )
+  df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 0 )
+  lives_saved_outcomes = sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p) 
+  
+  pareto_ideal = rbind(pareto_ideal, data.frame(frac_black, lives_saved,lives_saved_outcomes))
+}
+
+
+
+
+# ggplot colors
+peach <- "#F8766D"
+purple <- "#C77CFF"
+blue <- "#00BFC4"
+green <- "#00BE6C"
+browngreen <- "#A3A500"
+darkgreen <- "#006400"
+transparency <- 0.4
+labels = c("1", "2", "3", "4", "5")
+
+
+random_x <- 0.1
+random_y <- 280000 
+
+PC_FAIR = c('Proxy Discrimination\n& Path-Specific Counterfactual Fairness', 15892.9, 0.497, 15892.9)
+CF_FAIR = c('Counterfactual Fairness', 15887.8, 0.4976, 15887.8)
+RANDOM = c('Random Admissions', 14770, 0.50, 14770)
+
+p <- ggplot() +
+  geom_smooth(data=pareto_ideal,se=FALSE, aes(x=frac_black, y=lives_saved_outcomes, color='ML Outcomes (Given T, R)')) + 
+  scale_x_continuous("% Black Admits", labels = scales::percent) + 
+  ylab("# Boards Passages") +  
+  
+  geom_vline(xintercept = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_hline(yintercept = as.double(ML_MAX_BOARDS_PASSAGE[[4]]), linetype = "dashed", colour = peach, alpha=transparency) +
+  geom_point(aes(x = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
+  annotate("text", x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])+0.05, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])- 200, label = ML_MAX_BOARDS_PASSAGE[[1]]) +
 
   geom_vline(xintercept = as.double(ML_MAX_UTILITY[[3]]), linetype = "dashed", colour = blue, alpha=transparency) +
   geom_hline(yintercept = as.double(ML_MAX_UTILITY[[4]]), linetype = "dashed", colour = blue, alpha=transparency) +
@@ -480,22 +662,22 @@ p <- ggplot() +
 
   
   
-      geom_vline(xintercept = as.double(PC_FAIR2[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
-  geom_hline(yintercept = as.double(PC_FAIR2[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
-  geom_point(aes(x = as.double(PC_FAIR2[[3]]), y = as.double(PC_FAIR2[[4]])), color = browngreen, size = 3) +
-  annotate("text", x = as.double(PC_FAIR2[[3]])-0.06, y = as.double(PC_FAIR2[[4]]) - 300, label = PC_FAIR2[[1]]) +
-
+ #     geom_vline(xintercept = as.double(CF_FAIR[[3]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+ # geom_hline(yintercept = as.double(CF_FAIR[[4]]), linetype = "dashed", colour = browngreen, alpha=transparency) +
+ # geom_point(aes(x = as.double(CF_FAIR[[3]]), y = as.double(CF_FAIR[[4]])), color = browngreen, size = 3) +
+ # annotate("text", x = as.double(CF_FAIR[[3]])-0.06, y = as.double(CF_FAIR[[4]]) - 300, label = CF_FAIR[[1]]) +
+#
   
   geom_vline(xintercept = as.double(PC_FAIR[[3]]), linetype = "dashed", colour = purple, alpha=transparency) +
   geom_hline(yintercept = as.double(PC_FAIR[[4]]), linetype = "dashed", colour = purple, alpha=transparency) +
   geom_point(aes(x = as.double(PC_FAIR[[3]]), y = as.double(PC_FAIR[[4]])), color = purple, size = 3) +
-  annotate("text", x = as.double(PC_FAIR[[3]])-0.20, y = as.double(PC_FAIR[[4]]) - 50, label = PC_FAIR[[1]]) +
+  annotate("text",hjust = 1, x = as.double(PC_FAIR[[3]])-0.02, y = as.double(PC_FAIR[[4]]) - 50, label = PC_FAIR[[1]]) +
 
     
   geom_vline(xintercept = as.double(RANDOM[[3]]), linetype = "dashed", colour = darkgreen, alpha=transparency) +
   geom_hline(yintercept = as.double(RANDOM[[4]]), linetype = "dashed", colour = darkgreen, alpha=transparency) +
   geom_point(aes(x = as.double(RANDOM[[3]]), y = as.double(RANDOM[[4]])), color = darkgreen, size = 3) +
-  annotate("text", x = as.double(RANDOM[[3]])-0.05, y = as.double(RANDOM[[4]]) - 50, label = RANDOM[[1]]) +
+  annotate("text", x = as.double(RANDOM[[3]])-0.10, y = as.double(RANDOM[[4]]) - 50, label = RANDOM[[1]]) +
 
   
   
@@ -505,7 +687,7 @@ p <- ggplot() +
            'ML Outcomes (Given T, R, E)'="blue",
            'ML Outcomes (Given T, R)'="violet" )) + 
   theme(legend.title = element_blank())
-ggsave(plot=p, filename='./01.pdf', height=5, width=10)
+ggsave(plot=p, filename='./02_dags.pdf', height=5, width=10)
 p
 
 
