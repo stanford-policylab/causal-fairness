@@ -1,0 +1,281 @@
+---
+title: "Simulation 02"
+author: "Hamed Nilforoshan"
+date: "2/18/2021"
+output:
+  github_document:
+    pandoc_args: --webtex
+---
+
+
+```{r setup, include=FALSE}
+library(sigmoid)
+library(tidymodels)
+library(tidyverse)
+library(furrr)
+
+# Set number of workers.
+plan(multicore, workers = 4)
+
+# Set the ggplot theme.
+theme_set(theme_bw(base_size = 20))
+```
+
+## Overview
+
+We construct a stylized example illustrating the sub-optimal outcomes of Wang and Blei's fairness definitions (Affirmative Action and Equal Opportunity) on utility. 
+
+## Setup
+
+A "book of life" is a draw of each potential outcome for a population of a given
+size. We'll define a function that generates a book of life for a given set of
+parameters. T
+
+```{r book_of_life}
+gen_book_of_life <- function(
+  pop_size,
+  frac_black,
+  e_0,
+  e_r, 
+  e_noise,
+  m_0,
+  m_e,
+  m_noise,
+  t_0,
+  t_m,
+  t_e,
+  t_noise,
+  a_0,
+  a_t,
+  a_r,
+  ...
+) {
+  
+  # Define the structural equations.
+  f_E <- function(r_i, noise){
+    return(round(pmax(0,pmin(e_0 + e_r*r_i + noise,100)),digits=1))
+  }
+  
+  f_M <- function(e_i, noise){
+    return(round(pmax(0,pmin(m_0 + m_e*e_i + noise,100)),digits=1))
+  }
+
+  f_T <- function(m_i, e_i, noise){
+    return(round(pmax(0,pmin(t_0 + t_m*m_i + t_e*e_i + noise ,100)),digits=1))
+  }
+  
+  f_A_raw <- function(t_i, r_i){
+    return(a_t*t_i + a_r*r_i + a_0)
+    #return(round(sigmoid(a_t*t_i + a_r*r_i- a_0), digits = 0))
+  }
+  
+  f_A <- function(t_i, r_i){
+    return(sigmoid(a_t*t_i + a_r*r_i + a_0))
+  }
+
+  
+
+  # Generate the book of life.
+  book_of_life <- tibble(
+      # Generate the exogenous variables.
+      R = as.integer(rbernoulli(pop_size, frac_black)), # Race (Black=1, White=0)
+      
+      E_noise = rnorm(pop_size, mean = 0, sd = e_noise), #Educational opportunities
+      E_black = f_E(1,noise = E_noise),
+      E_white = f_E(0,noise = E_noise),
+      
+      M_noise = rnorm(pop_size, mean = 0, sd = m_noise), #Medical school preparation
+      M_black = f_M(E_black, noise=M_noise),
+      M_white = f_M(E_white, noise=M_noise),
+
+      # Generate the endogenous variables.
+      T_noise = rnorm(pop_size, mean = 0, sd = t_noise), #Medical school preparation
+      T_black = f_T(M_black, E_black, noise=T_noise),
+      T_white = f_T(M_white, E_white, noise=T_noise),
+      
+      E = if_else(R==1,E_black,E_white),
+      M = if_else(R==1,M_black,M_white),
+      T = if_else(R==1,T_black,T_white),
+
+      A_raw = f_A_raw(T, R), # Admissions Committee Decision 
+      A_prob = f_A(T, R), # Admissions Committee Decision 
+      A = as.integer(runif(pop_size,min=0,max=1) < A_prob),
+      A_black = f_A(T_black, 1), # Admissions Committee Decision 
+      A_white = f_A(T_white, 0), # Admissions Committee Decision 
+
+      # Generate potential outcomes
+      L_p = M, # Lives saved if admitted
+      D_p = R , # Added diversity if admitted  
+      
+      # Generate observed outcomes
+      L_o = L_p * A, # Lives saved observed
+      D_o = D_p * A  # Added diversity observed 
+      
+  )
+}
+```
+
+
+## Initialize parameters and books of life
+We initialize the training population size for the book of life, the fraction of the population that is a minority (black), and the number of counterfactual draws when calculating affirmative action decisions.
+
+We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
+
+```{r init}
+POP_SIZE = 1000000
+POP_SIZE_TEST = 5000
+POP_SIZE_TEST_ADMIT = 2500
+FRAC_BLACK = 0.2
+COUNTER_FACTUAL_SAMPLE = 10000
+
+
+df_train <-gen_book_of_life(pop_size=POP_SIZE,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-50,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.5,
+                            t_e=0.5,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-50,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.5,
+                            t_e=0.5,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+```
+
+
+
+
+## Use the biased admissions committee model as the baseline 
+
+```{r ml_naive}
+
+ml_naive <- glm(A ~ T + R, data = df_train, family = "binomial", control = list(maxit = 1000))
+summary(ml_naive)
+
+df_test$ml_naive = plogis(predict(ml_naive,df_test))
+df_test<-df_test[order(df_test$ml_naive,decreasing=TRUE),]
+
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$L_p)
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$D_p)
+
+```
+
+
+
+
+
+## Use the outcomes model
+
+```{r ml_outcomes}
+
+df_train_ = filter(df_train, A == 1 )
+ml_outcomes <- lm(L_p ~ T+R, data = df_train_)
+summary(ml_outcomes)
+df_test$ml_outcomes = predict(ml_outcomes,df_test)
+df_test<-df_test[order(df_test$ml_outcomes,decreasing=TRUE),]
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$L_p)
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$D_p)
+
+summary(ml_outcomes)
+```
+
+
+## Calculate the EO-Fair decision 
+
+```{r ml_eo_fair}
+
+df_test_black = tibble(df_test)
+df_test_black$R=1
+df_test_white = tibble(df_test)
+df_test_white$R=0
+df_test$ml_eo_fair = FRAC_BLACK*plogis(predict(ml_naive,df_test_black)) + (1-FRAC_BLACK)*plogis(predict(ml_naive,df_test_white))
+df_test<-df_test[order(df_test$ml_eo_fair,decreasing=TRUE),]
+
+
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$L_p)
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$D_p)
+```
+
+
+## Calculate the AA-Fair decision
+
+```{r aa_fair_model}
+#Setup counterfactual probability distributions
+aa_probs_black <- df_train %>%
+  count(R, T, T_black) %>%
+  group_by(R, T) %>%
+  mutate(p = n / sum(n)) %>%
+  ungroup()
+  
+aa_probs_white <- df_train %>%
+  count(R, T, T_white) %>%
+  group_by(R, T) %>%
+  mutate(p = n / sum(n)) %>%
+  ungroup()
+
+
+AA_FAIR_MODEL <- function(applicant_race, applicant_test){
+  
+# Get sampling space for black and white counterfactuals
+aa_probs_black_sample <- aa_probs_black %>% 
+filter(R == applicant_race, T==applicant_test)
+aa_probs_white_sample <- aa_probs_white %>% 
+filter(R == applicant_race, T==applicant_test)
+
+#sample test scores, first for black counterfactual, then for white
+sampled_test_scores = aa_probs_black_sample[sample.int(nrow(aa_probs_black_sample), COUNTER_FACTUAL_SAMPLE*FRAC_BLACK, replace = TRUE, prob = aa_probs_black_sample$p),]$T_black
+sampled_test_scores = c(sampled_test_scores,aa_probs_white_sample[sample.int(nrow(aa_probs_white_sample), COUNTER_FACTUAL_SAMPLE*(1-FRAC_BLACK), replace = TRUE, prob = aa_probs_white_sample$p),]$T_white)
+
+
+aa_input_black <- tibble(R=1, T=sampled_test_scores)
+aa_input_white <- tibble(R=0, T=sampled_test_scores)
+
+AA_DECISION = mean(FRAC_BLACK*plogis(predict(ml_naive,aa_input_black)) + (1-FRAC_BLACK)*plogis(predict(ml_naive,aa_input_white)))
+
+return(AA_DECISION)
+  }
+```
+
+
+
+```{r ml_aa_fair_run}
+df_test <- df_test %>% 
+  rowwise() %>% 
+  mutate(ml_aa_fair = AA_FAIR_MODEL(R,T))
+
+
+df_test<-df_test[order(df_test$ml_aa_fair,decreasing=TRUE),]
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$L_p)
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$D_p)
+```
+
+
+df_test$L_P
+
+df_test<-df_test[order(df_test$L_p,decreasing=TRUE),]
+
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$L_p)
+sum(head(df_test,n=POP_SIZE_TEST_ADMIT)$D_p)
+
+

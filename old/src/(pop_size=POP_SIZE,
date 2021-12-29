@@ -1,0 +1,114 @@
+(pop_size=POP_SIZE,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-25,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.5,
+                            t_e=0.5,
+                            t_noise=10,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+ML Naive
+[1] 15501.21
+[1] 11
+
+ML Outcomes
+[1] 15498.47
+[1] 32
+
+
+EO-Fair 
+[1] 15495.07
+[1] 29
+
+
+AA-Fair
+[1] 15524.99
+[1] 47
+
+
+(pop_size=POP_SIZE,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-25,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.85,
+                            t_e=0.15,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+ML Naive
+
+[1] 161496.3
+[1] 116
+
+
+ML Outcomes
+[1] 163352.6
+[1] 343
+
+
+EO-Fair 
+[1] 15840.49
+[1] 31
+
+
+AA-Fair
+[1] 15699.89
+[1] 50
+
+
+
+
+
+
+
+(pop_size=POP_SIZE,
+                            frac_black=FRAC_BLACK,
+                            e_0=50,
+                            e_r=-25,
+                            e_noise=30,
+                            m_0=25,
+                            m_e=0.5,
+                            m_noise=20,
+                            t_0=0,
+                            t_m=0.15,
+                            t_e=0.85,
+                            t_noise=5,
+                            a_0=-2.0,
+                            a_t=0.04,
+                            a_r=-1)
+
+
+ML Naive
+
+[1] 148453.8
+[1] 106
+
+
+ML Outcomes
+[1] 149852.4
+[1] 296
+
+
+EO-Fair 
+[1] 149971.7
+[1] 281
+
+
+AA-Fair
+[1] 148322.1
+[1] 545
+
