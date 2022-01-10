@@ -2,3 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
+*.csv
+df_test.csv
