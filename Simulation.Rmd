@@ -141,8 +141,8 @@ gen_book_of_life <- function(
       B_p_reject_noise = rnorm(pop_size, mean = b_p_reject_noise_mean, sd = b_p_reject_noise),
       B_p = as.integer(sigmoid(M) >=B_p_unif) ,
       B_p_raw = sigmoid(M),
-      B_p_reject = as.integer(sigmoid(M-B_p_reject_noise) >=B_p_unif),
-      B_p_reject_raw = sigmoid(M-B_p_reject_noise),
+      B_p_reject = as.integer(sigmoid(M-0.5) >=B_p_unif),
+      B_p_reject_raw = sigmoid(M-0.5),
 
       D_p = R , # Added diversity if admitted  
       
@@ -278,7 +278,7 @@ summary(ml_outcomes)
 BOOST = 0.0
 
 df_test$ml_outcomes = predict(ml_outcomes,df_test, type = "response") + BOOST*df_test$R
-#df_test$ml_outcomes = predict(ml_outcomes,df_test) #+ BOOST*df_test$
+df_test$ml_outcomes_prob =  predict(ml_outcomes,df_test, type = "response") 
 
 df_test_black = tibble(df_test)
 df_test_black$R=1

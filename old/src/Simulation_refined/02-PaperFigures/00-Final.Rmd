@@ -150,8 +150,10 @@ gen_book_of_life <- function(
       L_p = M, # Lives saved if admitted
       B_p = as.integer(sigmoid(M) >=B_p_unif) ,
       B_p_raw = sigmoid(M),
-      B_p_reject = as.integer(sigmoid(M-B_p_reject_noise) >=B_p_unif),
-      B_p_reject_raw = sigmoid(M-B_p_reject_noise),
+      B_p_reject = as.integer(sigmoid(M-0.5) >=B_p_unif),
+      B_p_reject_raw = sigmoid(M-0.5),
+      
+      #\sigmoid (M - (D=1)*u_B_p * Beta) > 
 
       D_p = R , # Added diversity if admitted  
       
