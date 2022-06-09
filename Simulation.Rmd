@@ -44,7 +44,7 @@ Prints out the results of a given admissions method
 
   return_results <- function(DF_TEST, DF_TEST_COL, N_ADMIT, RESULT_NAME){
     DF_TEST<-DF_TEST[order(DF_TEST_COL,decreasing=TRUE),]
-    return(c(RESULT_NAME, "Results", sum(head(DF_TEST,n=N_ADMIT)$D_p)/N_ADMIT, sum(head(DF_TEST,n=N_ADMIT)$B_p / POP_SIZE_TEST_ADMIT)))
+    return(c(RESULT_NAME, "Results", sum(head(DF_TEST,n=N_ADMIT)$D_p)/1.0, sum(head(DF_TEST,n=N_ADMIT)$B_p )))
   }
 
 ```
@@ -157,10 +157,10 @@ We initialize the training population size for the book of life, the fraction of
 We then initial two books of life. One is for training our models, and the second is for testing what happens when the models are applied to a new, unseen dataset
 
 ```{r init}
-set.seed(1)
+set.seed(42)
 
 POP_SIZE = 10000000
-POP_SIZE_TEST = 1000000
+POP_SIZE_TEST = 100000
 FRAC_BLACK = 0.33
 BOARD_PASS_CUTOFF = 0.75
 DISCRETE = TRUE
@@ -235,8 +235,8 @@ df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
                             b_p_reject_noise_mean=B_P_REJECT_NOISE_MEAN,)
 
 
-POP_SIZE_TEST_ADMIT = sum(df_test$A)
-FRAC_ADMIT = POP_SIZE_TEST_ADMIT / POP_SIZE_TEST
+FRAC_ADMIT = 0.50 # POP_SIZE_TEST_ADMIT / POP_SIZE_TEST
+POP_SIZE_TEST_ADMIT = FRAC_ADMIT * POP_SIZE_TEST #sum(df_test$A)
 
 df_train_ = filter(df_train, A == 1 )
 BLACK_ADMITS = sum(df_train_$R)
@@ -490,10 +490,10 @@ system('export PATH="/Users/hamedn/opt/anaconda3/bin:$PATH";
 ```{r load_lp_results}
 lp_results <- read.csv("lp_results.csv", sep = "\t")
 
-PC_FAIR = c('Counterfactual Fairness\n& Path-Specific Fairness\n(Random)', 0, lp_results[lp_results$Policy.Name=='Counterfactual Fairness',]$Frac.Diverse.Candidates, lp_results[lp_results$Policy.Name=='Counterfactual Fairness',]$Total.Graduated/ POP_SIZE_TEST_ADMIT)
-EO_FAIR = c('Counterfactual Equalized Odds', 0, lp_results[lp_results$Policy.Name=='Counterfactual Equalized Odds',]$Frac.Diverse.Candidates, lp_results[lp_results$Policy.Name=='Counterfactual Equalized Odds',]$Total.Graduated/ POP_SIZE_TEST_ADMIT)
-PRINCIPAL_FAIR = c('Principal Fairness', 0, lp_results[lp_results$Policy.Name=='Principal Fairness',]$Frac.Diverse.Candidates, lp_results[lp_results$Policy.Name=='Principal Fairness',]$Total.Graduated/ POP_SIZE_TEST_ADMIT)
-ML_PREDICT_PAR = c('Counterfactual Pred. Parity', 0, lp_results[lp_results$Policy.Name=='Counterfactual Pred. Parity',]$Frac.Diverse.Candidates, lp_results[lp_results$Policy.Name=='Counterfactual Pred. Parity',]$Total.Graduated/ POP_SIZE_TEST_ADMIT)
+PC_FAIR = c('Counterfactual Fairness\n& Path-Specific Fairness\n(Random)', 0, lp_results[lp_results$Policy.Name=='Counterfactual Fairness',]$Frac.Diverse.Candidates * POP_SIZE_TEST_ADMIT, lp_results[lp_results$Policy.Name=='Counterfactual Fairness',]$Total.Graduated)
+EO_FAIR = c('Counterfactual Equalized Odds', 0, lp_results[lp_results$Policy.Name=='Counterfactual Equalized Odds',]$Frac.Diverse.Candidates *POP_SIZE_TEST_ADMIT , lp_results[lp_results$Policy.Name=='Counterfactual Equalized Odds',]$Total.Graduated)
+PRINCIPAL_FAIR = c('Principal Fairness', 0, lp_results[lp_results$Policy.Name=='Principal Fairness',]$Frac.Diverse.Candidates *POP_SIZE_TEST_ADMIT , lp_results[lp_results$Policy.Name=='Principal Fairness',]$Total.Graduated)
+ML_PREDICT_PAR = c('Counterfactual Pred. Parity', 0, lp_results[lp_results$Policy.Name=='Counterfactual Pred. Parity',]$Frac.Diverse.Candidates *POP_SIZE_TEST_ADMIT, lp_results[lp_results$Policy.Name=='Counterfactual Pred. Parity',]$Total.Graduated)
 
 ```
 
@@ -507,7 +507,7 @@ pareto_ideal = NULL
 
 for (num_black_admit in seq(from=1,to=as.integer(N+10),by=as.integer(N/200))){
   cat(num_black_admit)
-  frac_black = num_black_admit/POP_SIZE_TEST_ADMIT
+  frac_black = num_black_admit
   
   #df_test_black<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 1 )
   #df_test_white<- df_test[order(df_test$L_p,decreasing=TRUE),] %>% filter( R == 0 )
@@ -515,9 +515,9 @@ for (num_black_admit in seq(from=1,to=as.integer(N+10),by=as.integer(N/200))){
   
   df_test_black<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 1 )
   df_test_white<- df_test[order(df_test$ml_outcomes,decreasing=TRUE),] %>% filter( R == 0 )
-  lives_saved_outcomes = (sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p)) / POP_SIZE_TEST_ADMIT
+  lives_saved_outcomes = (sum(head(df_test_black,n=num_black_admit)$B_p) + sum(head(df_test_white,n=POP_SIZE_TEST_ADMIT-num_black_admit)$B_p))
   
-  pareto_ideal = rbind(pareto_ideal, data.frame(frac_black,lives_saved_outcomes))
+  pareto_ideal = rbind(pareto_ideal, data.frame(frac_black ,lives_saved_outcomes))
   
   #frac_black = as.double(ML_MAX_BOARDS_PASSAGE[[3]])
   #lives_saved_outcomes = as.double(ML_MAX_BOARDS_PASSAGE[[4]]) 
@@ -550,21 +550,21 @@ lo = loess(lives_saved_outcomes ~ frac_black, pareto_ideal,span = 0.75 )
 pareto_ideal$smooth_y = predict(lo, pareto_ideal$frac_black, se = FALSE)
 
 p <- ggplot() +
-  geom_vline(xintercept = FRAC_BLACK, linetype = "dashed", size=1.0, colour = rgb(0, 0, 0, 255, maxColorValue = 255), alpha=0.5) +
+  geom_vline(xintercept = FRAC_BLACK*POP_SIZE_TEST_ADMIT, linetype = "dashed", size=1.0, colour = rgb(0, 0, 0, 255, maxColorValue = 255), alpha=0.5) +
   
   geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1) + 
   geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dashed",size=1) + 
   
-  scale_x_continuous("Admitted Applicants from Target Group (%)", labels = scales::percent_format(accuracy = 5L)) + 
-  scale_y_continuous("Graduation Rate (%)",labels = scales::percent_format(accuracy = 5L)) +
-  coord_cartesian(xlim = c(0.0, 0.60),ylim = c(0.437, 0.635),expand = FALSE) + 
+  scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
+  scale_y_continuous("Bachelor's Degree Attainment", labels = scales::comma) +
+  coord_cartesian(xlim = c(0.0, 30000),ylim = c(22000, 31500),expand = FALSE) + 
   
   geom_point(aes(x = as.double(ML_MAX_BOARDS_PASSAGE[[3]]), y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
-  annotate("text",size=5, x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])-0.065-0.035-0.02+0.125+0.125, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])+ (-200+250+250)/ POP_SIZE_TEST_ADMIT, label = ML_MAX_BOARDS_PASSAGE[[1]]) +
+  annotate("text",size=5, x = as.double(ML_MAX_BOARDS_PASSAGE[[3]])-0.065-0.035-0.02+0.125+0.125, y = as.double(ML_MAX_BOARDS_PASSAGE[[4]])+ (-200+250+250)/ 1.0, label = ML_MAX_BOARDS_PASSAGE[[1]]) +
 
   geom_point(aes(x = as.double(ML_MAX_UTILITY[[3]]), y = as.double(ML_MAX_UTILITY[[4]])), color = blue, size = 3) +
   
-  annotate("text",size=5, x = as.double(ML_MAX_UTILITY[[3]])-0.06+0.075-0.01, y = as.double(ML_MAX_UTILITY[[4]])-500/ POP_SIZE_TEST_ADMIT, label = expression("Max Utility (for " * lambda ~  " = " * frac(1, 4) *")")) +
+  annotate("text",size=5, x = as.double(ML_MAX_UTILITY[[3]])-0.06+0.075-0.01, y = as.double(ML_MAX_UTILITY[[4]])-500/ 1.0, label = expression("Max Utility (for " * lambda ~  " = " * frac(1, 4) *")")) +
 
   #annotate("text",size=5, x = as.double(ML_MAX_UTILITY[[3]])-0.06+0.075-0.01, y = as.double(ML_MAX_UTILITY[[4]])-500/ POP_SIZE_TEST_ADMIT, label = expression(atop("Max Utility","(for " * lambda ~  " = " * frac(1, 4) *")"))) +
   
