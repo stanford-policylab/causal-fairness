@@ -136,8 +136,9 @@ We then initial two books of life. One is for training our models, and the secon
 
 ```{r init}
 
-set.seed(00)
+set.seed(1)
 
+POP_SIZE_TRAIN = 10000000
 POP_SIZE_TEST = 100000
 FRAC_BLACK = 0.33
 DISCRETE = TRUE
@@ -161,6 +162,28 @@ A_R = -0.33
 A_I = 0.33
 B_P_REJECT_NOISE_SD = 0.3
 B_P_REJECT_NOISE_MEAN = -0.5
+
+df_train <-gen_book_of_life(pop_size=POP_SIZE_TRAIN,
+                            frac_black=FRAC_BLACK,
+                            discrete=DISCRETE,
+                            e_0=E_0,
+                            e_r=E_R,
+                            e_noise=E_NOISE,
+                            m_0=M_0,
+                            m_e=M_E,
+                            m_noise=M_NOISE,
+                            t_0=T_0,
+                            t_m=T_M,
+                            t_e=T_E,
+                            t_e_m=T_E_M,
+                            t_noise=T_NOISE,
+                            i_noise=I_NOISE,
+                            a_0=A_0,
+                            a_t=A_T,
+                            a_r=A_R,
+                            a_i=A_I,
+                            b_p_reject_noise=B_P_REJECT_NOISE_SD,
+                            b_p_reject_noise_mean=B_P_REJECT_NOISE_MEAN,)
 
 
 df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
@@ -186,9 +209,11 @@ df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
                             b_p_reject_noise_mean=B_P_REJECT_NOISE_MEAN,)
 
 
+
 FRAC_ADMIT = 0.50 
 POP_SIZE_TEST_ADMIT = FRAC_ADMIT * POP_SIZE_TEST #sum(df_test$A)
 
+write.csv(df_train,'./df_train.csv')
 write.csv(df_test,'./df_test.csv')
 ```
 
@@ -231,7 +256,7 @@ N=round(POP_SIZE_TEST_ADMIT)  * FRAC_BLACK * 2.0
 MAX_BLACK_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_BLACK* 2.0
 pareto_ideal = NULL
 
-for (num_black_admit in seq(from=1,to=FRAC_BLACK * POP_SIZE_TEST + 10000 ,by=as.integer(POP_SIZE_TEST_ADMIT/200))){
+for (num_black_admit in seq(from=1,to=FRAC_BLACK * POP_SIZE_TEST + 1000 ,by=as.integer(POP_SIZE_TEST_ADMIT/1000))){
   cat(num_black_admit)
   frac_black = num_black_admit
 
@@ -262,36 +287,36 @@ max_graduation <- pareto_ideal[which.max(pareto_ideal$lives_saved_outcomes),]
 MAX_BOARDS_PASSAGE = c("Max Graduation", 0, max_graduation$frac_black, max_graduation$lives_saved_outcomes)
 
 pareto_ideal$cutoff = pareto_ideal$frac_black >= as.double(MAX_BOARDS_PASSAGE[[3]])
-lo = loess(lives_saved_outcomes ~ frac_black, pareto_ideal,span = 0.4 )
+lo = loess(lives_saved_outcomes ~ frac_black, pareto_ideal,span = 0.5 )
 pareto_ideal$smooth_y = predict(lo, pareto_ideal$frac_black, se = FALSE)
 
 
 p <- ggplot() +
   
-  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1) + 
-  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dashed",size=1) + 
+  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
+  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_black, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dashed",size=1.5) + 
   
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
-  scale_y_continuous("Bachelor's Degree Attainment", labels = scales::comma) +
-  coord_cartesian(xlim = c(0.0, 33000),ylim = c(21900, 31500),expand = FALSE) + 
+  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+  coord_cartesian(xlim = c(0.0, 33000),ylim = c(21800, 31500),expand = FALSE) + 
   
-  geom_point(aes(x = as.double(MAX_BOARDS_PASSAGE[[3]]), y = as.double(MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 3) +
+  geom_point(aes(x = as.double(MAX_BOARDS_PASSAGE[[3]]), y = as.double(MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 4) +
   annotate("text",size=5, x = as.double(MAX_BOARDS_PASSAGE[[3]])-0.065-0.035-0.02+0.125+0.125, y = as.double(MAX_BOARDS_PASSAGE[[4]])+ (-200+250+250)/ 1.0, label = MAX_BOARDS_PASSAGE[[1]]) +
 
-  geom_point(aes(x = as.double(MAX_UTILITY[[3]]), y = as.double(MAX_UTILITY[[4]])), color = blue, size = 3) +
+  geom_point(aes(x = as.double(MAX_UTILITY[[3]]), y = as.double(MAX_UTILITY[[4]])), color = blue, size = 4) +
   
   annotate("text",size=5, x = as.double(MAX_UTILITY[[3]])-0.06+0.075-0.01, y = as.double(MAX_UTILITY[[4]])-500/ 1.0, label = expression("Max Utility (for " * lambda ~  " = " * frac(1, 4) *")")) +
 
-  geom_point(aes(x = as.double(PC_FAIR[[3]]), y = as.double(PC_FAIR[[4]])), color = purple, size = 3) +
+  geom_point(aes(x = as.double(PC_FAIR[[3]]), y = as.double(PC_FAIR[[4]])), color = purple, size = 4) +
   annotate("text",size=5,lineheight = 0.85,hjust = 1, x = as.double(PC_FAIR[[3]])-0.02, y = as.double(PC_FAIR[[4]]) +  500 + (-50+5000 + 100)/ POP_SIZE_TEST_ADMIT, label = PC_FAIR[[1]]) +
     
-  geom_point(aes(x = as.double(PRINCIPAL_FAIR[[3]]), y = as.double(PRINCIPAL_FAIR[[4]])), color = darkgreen, size = 3) +
+  geom_point(aes(x = as.double(PRINCIPAL_FAIR[[3]]), y = as.double(PRINCIPAL_FAIR[[4]])), color = darkgreen, size = 4) +
   annotate("text",size=5, x = as.double(PRINCIPAL_FAIR[[3]])-0.11-0.015+0.04, y = as.double(PRINCIPAL_FAIR[[4]]) +( - 50 + 100 - 500-100)/ POP_SIZE_TEST_ADMIT, label = PRINCIPAL_FAIR[[1]]) +
 
-  geom_point(aes(x = as.double(ML_PREDICT_PAR[[3]]), y = as.double(ML_PREDICT_PAR[[4]])), color = green, size = 3) +
+  geom_point(aes(x = as.double(ML_PREDICT_PAR[[3]]), y = as.double(ML_PREDICT_PAR[[4]])), color = green, size = 4) +
   annotate("text",size=5, x = as.double(ML_PREDICT_PAR[[3]])+0.13+0.02, y = as.double(ML_PREDICT_PAR[[4]]) + 50/ POP_SIZE_TEST_ADMIT, label = ML_PREDICT_PAR[[1]]) +
   
-  geom_point(aes(x = as.double(EO_FAIR[[3]]), y = as.double(EO_FAIR[[4]])), color = browngreen, size = 3) +
+  geom_point(aes(x = as.double(EO_FAIR[[3]]), y = as.double(EO_FAIR[[4]])), color = browngreen, size = 4) +
   annotate("text",size=5,lineheight = 0.85,hjust = 1, x = as.double(EO_FAIR[[3]])-0.01, y = as.double(EO_FAIR[[4]]) +(- 750+200+80)/ POP_SIZE_TEST_ADMIT, label = EO_FAIR[[1]]) +
 
   scale_color_manual(
