@@ -24,7 +24,8 @@ theme_set(theme_bw(base_size = 20))
 
 ## Overview
 
-We construct a stylized example to evaluate the outcomes of varying definitions of Causal Fairness 
+We construct a stylized example of college admissions to analyze the downstream consequences
+of implementing many causal fairness definitions as decision-making constraints 
 
 ## Setup
 
@@ -209,7 +210,7 @@ df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
                             b_p_reject_noise_mean=B_P_REJECT_NOISE_MEAN,)
 
 
-
+DIVERSITY_UTILITY = 0.25
 FRAC_ADMIT = 0.50 
 POP_SIZE_TEST_ADMIT = FRAC_ADMIT * POP_SIZE_TEST #sum(df_test$A)
 
@@ -222,13 +223,16 @@ write.csv(df_test,'./df_test.csv')
 ## Run linear programs in .ipynb and get output
 
 ```{r run_commands}
-system('export PATH="/Users/hamedn/opt/anaconda3/bin:$PATH"; 
+
+system(sprintf('export PATH="/Users/hamedn/opt/anaconda3/bin:$PATH"; 
+        export DIVERSITY_UTILITY=%s;
+        export FRAC_ADMIT=%s;
        jupyter nbconvert --execute --to notebook --inplace 00-Maximize-Utility.ipynb;
        jupyter nbconvert --execute --to notebook --inplace 01-Counterfactual-Fairness.ipynb;
        jupyter nbconvert --execute --to notebook --inplace 02-Path-Specific-Fairness.ipynb;
        jupyter nbconvert --execute --to notebook --inplace 03-Equalized_Odds.ipynb;
        jupyter nbconvert --execute --to notebook --inplace 04-Principal-Fairness.ipynb;
-       jupyter nbconvert --execute --to notebook --inplace 05-Counterfactual-Predictive-Parity.ipynb;')
+       jupyter nbconvert --execute --to notebook --inplace 05-Counterfactual-Predictive-Parity.ipynb;', DIVERSITY_UTILITY, FRAC_ADMIT))
 
 ```
 
@@ -298,8 +302,7 @@ p <- ggplot() +
   
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
   scale_y_continuous("College Degree Attainment", labels = scales::comma) +
-  coord_cartesian(xlim = c(0.0, 33000),ylim = c(21800, 31500),expand = FALSE) + 
-  
+  coord_cartesian(xlim = c(0.0, 30000),ylim = c(21800, 31500),expand = FALSE) + 
   geom_point(aes(x = as.double(MAX_BOARDS_PASSAGE[[3]]), y = as.double(MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 4) +
   annotate("text",size=5, x = as.double(MAX_BOARDS_PASSAGE[[3]])-0.065-0.035-0.02+0.125+0.125, y = as.double(MAX_BOARDS_PASSAGE[[4]])+ (-200+250+250)/ 1.0, label = MAX_BOARDS_PASSAGE[[1]]) +
 
