@@ -1,6 +1,3 @@
-![visual](./preview.png)
-
-
 # Citation 
 
 MLA:
