@@ -116,7 +116,7 @@ We then sample two books of life. One is for estimation, and the second is for t
 set.seed(1)
 
 POP_SIZE_TRAIN = 10000000
-POP_SIZE_TEST = 100000
+POP_SIZE_TEST = 1000000
 FRAC_minority = 0.33
 DISCRETE = TRUE
 
