@@ -171,11 +171,12 @@ df_test <-gen_book_of_life(pop_size=POP_SIZE_TEST,
 
 
 DIVERSITY_UTILITY = 0.25
-FRAC_ADMIT = 0.50 
+FRAC_ADMIT = 0.25
 POP_SIZE_TEST_ADMIT = FRAC_ADMIT * POP_SIZE_TEST 
 
 write.csv(df_train,'./df_train.csv')
 write.csv(df_test,'./df_test.csv')
+
 ```
 
 
@@ -220,7 +221,9 @@ N=round(POP_SIZE_TEST_ADMIT)  * FRAC_minority * 2.0
 MAX_minority_ADMIT = POP_SIZE_TEST_ADMIT * FRAC_minority* 2.0
 pareto_ideal = NULL
 
-for (num_minority_admit in seq(from=1,to=FRAC_minority * POP_SIZE_TEST + 1000 ,by=as.integer(POP_SIZE_TEST_ADMIT/1000))){
+FRAC_ADMIT * POP_SIZE_TEST
+
+for (num_minority_admit in seq(from=1,to=FRAC_ADMIT * POP_SIZE_TEST,by=as.integer(POP_SIZE_TEST_ADMIT/1000))){
   cat(num_minority_admit)
   frac_minority = num_minority_admit
 
@@ -255,14 +258,17 @@ lo = loess(lives_saved_outcomes ~ frac_minority, pareto_ideal,span = 0.5 )
 pareto_ideal$smooth_y = predict(lo, pareto_ideal$frac_minority, se = FALSE)
 
 
+
+#  
+
+
 p <- ggplot() +
   
   geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
   geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dashed",size=1.5) + 
-  
+  coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST),ylim = c(90000, 185000),expand = FALSE) + 
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
   scale_y_continuous("College Degree Attainment", labels = scales::comma) +
-  coord_cartesian(xlim = c(0.0, 30000),ylim = c(21800, 31500),expand = FALSE) + 
   geom_point(aes(x = as.double(MAX_BOARDS_PASSAGE[[3]]), y = as.double(MAX_BOARDS_PASSAGE[[4]])), color = peach, size = 4) +
   annotate("text",size=5, x = as.double(MAX_BOARDS_PASSAGE[[3]]), y = as.double(MAX_BOARDS_PASSAGE[[4]]), label = MAX_BOARDS_PASSAGE[[1]]) +
 
@@ -291,3 +297,110 @@ p
 
 ```
 
+## Draw the pareto curve
+
+
+```{r pareto_curve_02}
+
+grid <- read.csv("outcomes_grid_cf_fairness.csv")
+
+
+p <- ggplot() +
+  ggtitle('Counterfactual Fairness / Path-Specific Fairness') +
+  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
+  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dotted",size=1.5) + 
+  geom_rect(data=grid,aes(xmin = min_black_admits, xmax = max_black_admits, ymin = min_graduates, ymax = max_graduates), color="#C04BFF50",fill="#C04BFF50",linetype=0.5) +
+  geom_point(aes(x = as.double(PC_FAIR[[3]]), y = as.double(PC_FAIR[[4]])), color = purple, size = 2) +
+  annotate("text",size=5,lineheight = 0.85,hjust = 1, x = as.double(PC_FAIR[[3]])+40000, y = as.double(PC_FAIR[[4]]), label ='Random') +
+    
+  coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
+  scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
+  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+
+  scale_color_manual(
+      values = c('ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank(),plot.margin = margin(0.25,1,0.25,0.5, "cm"),legend.position="none", axis.text=element_text(size=18),plot.title = element_text(size=22), axis.title=element_text(size=22), panel.grid = element_line(color = rgb(235, 235, 235, 100, maxColorValue = 255)))
+ggsave(plot=p, filename='./frontier_01.pdf', height=6, width=8)
+p
+
+
+```
+
+
+```{r pareto_curve_02}
+
+grid <- read.csv("outcomes_grid_cf_eo.csv")
+
+
+p <- ggplot() +
+  ggtitle('Counterfactual Equalized Odds') +
+  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
+  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dotted",size=1.5) + 
+  geom_rect(data=grid,aes(xmin = min_black_admits, xmax = max_black_admits, ymin = min_graduates, ymax = max_graduates), color=NA,fill="#BED05650",linetype=0,size=0.0) +
+
+  coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
+  scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
+  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+
+  scale_color_manual(
+      values = c('ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank(),plot.margin = margin(0.25,1,0.25,0.5, "cm"),legend.position="none", axis.text=element_text(size=18),plot.title = element_text(size=22), axis.title=element_text(size=22), panel.grid = element_line(color = rgb(235, 235, 235, 100, maxColorValue = 255)))
+ggsave(plot=p, filename='./frontier_02.pdf', height=6, width=8)
+p
+
+
+```
+
+
+
+```{r pareto_curve_02}
+
+grid <- read.csv("outcomes_grid_principal_fairness.csv")
+
+
+p <- ggplot() +
+  ggtitle('                           Principal Fairness') +
+  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
+  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dotted",size=1.5) + 
+  geom_rect(data=grid,aes(xmin = min_black_admits, xmax = max_black_admits, ymin = min_graduates, ymax = max_graduates), color="NA",fill="#E9A35950",linetype=0.5) +
+
+  coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
+  scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
+  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+
+  scale_color_manual(
+      values = c('ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank(),plot.margin = margin(0.25,1,0.25,0.5, "cm"),legend.position="none", axis.text=element_text(size=18),plot.title = element_text(size=22), axis.title=element_text(size=22), panel.grid = element_line(color = rgb(235, 235, 235, 100, maxColorValue = 255)))
+ggsave(plot=p, filename='./frontier_03.pdf', height=6, width=8)
+p
+
+
+```
+
+```{r pareto_curve_03}
+
+
+grid <- read.csv("outcomes_grid_cf_pred_par.csv")
+
+
+p <- ggplot() +
+  ggtitle('                 Counterfactual Predictive Parity') +
+  geom_line(data= filter(pareto_ideal, cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'),size=1.5) + 
+  geom_line(data= filter(pareto_ideal, !cutoff),aes(x=frac_minority, y=smooth_y, color='ML Outcomes (Given T, R)'), linetype = "dotted",size=1.5) + 
+  geom_rect(data=grid,aes(xmin = min_black_admits, xmax = max_black_admits, ymin = min_graduates, ymax = max_graduates), color="NA",fill="#69FF4B50",linetype=0.5) +
+
+  coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
+  scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
+  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+
+  scale_color_manual(
+      values = c('ML Outcomes (Given T, R)'="violet" )) + 
+  theme(legend.title = element_blank(),plot.margin = margin(0.25,1,0.25,0.5, "cm"),legend.position="none", axis.text=element_text(size=18),plot.title = element_text(size=22), axis.title=element_text(size=22), panel.grid = element_line(color = rgb(235, 235, 235, 100, maxColorValue = 255)))
+ggsave(plot=p, filename='./frontier_04.pdf', height=6, width=8)
+p
+
+
+```
+
+
+```
