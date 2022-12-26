@@ -315,7 +315,7 @@ p <- ggplot() +
     
   coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
-  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+  scale_y_continuous("Academic Index", labels = scales::comma) +
 
   scale_color_manual(
       values = c('ML Outcomes (Given T, R)'="violet" )) + 
@@ -340,7 +340,7 @@ p <- ggplot() +
 
   coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
-  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+  scale_y_continuous("Academic Index", labels = scales::comma) +
 
   scale_color_manual(
       values = c('ML Outcomes (Given T, R)'="violet" )) + 
@@ -366,7 +366,7 @@ p <- ggplot() +
 
   coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
-  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+  scale_y_continuous("Academic Index", labels = scales::comma) +
 
   scale_color_manual(
       values = c('ML Outcomes (Given T, R)'="violet" )) + 
@@ -391,7 +391,7 @@ p <- ggplot() +
 
   coord_cartesian(xlim = c(0.0, FRAC_ADMIT * POP_SIZE_TEST+10000),ylim = c(90000, 195000),expand = FALSE) + 
   scale_x_continuous("Admitted Applicants from Target Group", labels = scales::comma) + 
-  scale_y_continuous("College Degree Attainment", labels = scales::comma) +
+  scale_y_continuous("Academic Index", labels = scales::comma) +
 
   scale_color_manual(
       values = c('ML Outcomes (Given T, R)'="violet" )) + 
